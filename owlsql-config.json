@@ -1,0 +1,99 @@
+{
+	// This file contains the information needed to extract information from OWL
+	// files
+	
+	// You can give some variables to be used further down on the rest of this
+	// file. For a variable with name "var", you can refer to its value as
+	// "${var}" in the rest of the XML content. It will be replaced by the value
+	// of that variable. Notice that in the following case
+	//
+	// "variables": { "A": "${C}", "B": "value1", "C": "This is ${B}" },
+	//
+	// ${C} would be translated as "This is value1", and ${A} would also be
+	// replaces with "This is value1". However, cyclic references are caught and
+	// if any is found, an error occurs. Using a non-defined parameter is an
+	// error further down the file. To escape the dollar sign in a string, it
+	// must be doubled:
+	//
+	// "variables": { "temp": "$$ is a dollar sign" }
+	//
+	// Since all values are expanded in this way (except keys on JSON objects),
+	// this escaping mechanism must be used in every such string, if needed.
+	
+	"variables" : {
+		"home": "/home/jferreira/Ontologies"
+		// "home": "/home/joao/Documents/Ontologies"
+	},
+	
+	
+	// You can specify an ontology to load via the "ontologies" JSON array. This
+	// options expects a valid URL that can be retrieved from the system (file:)
+	// or from the web (http:).
+	// At least one ontology must be provided
+	
+	"ontologies": [
+		"file:${home}/pizza.owl"
+	],
+	
+	
+	// MySQL parameters must be given. The "mysql" JSON object contains the name
+	// of the database and the authentication parameters (username and password).
+	// Failing to give any of these attributes is an error. Additionally, you
+	// can also given the optional "host" parameter; if not gien, "localhost" is
+	// used.
+	
+	"mysql": {
+		"database": "ssm",
+		"username": "user",
+		"password": "pass",
+		"host": "localhost"
+	},
+	
+	
+	// The "extractors" element must contain a list of extractors to use.
+	// Each item must be a string containing the the binary name of a Java class
+	// that implements either the pt.owlsql.Cacher abstract class or the
+	// pt.owlsql.OWLExtractor abstract class.
+	//
+	// Note that you can mix cachers and extractors. They will always be
+	// executed in the order given in this configuration file.
+	//
+	// Both cachers and extractors must have a 0-argument constructor
+	
+	"extractors": [
+		"pt.owlsql.extractors.SQLCoreUtils",
+		"pt.owlsql.extractors.NamesExtractor",
+		"pt.owlsql.extractors.HierarchyExtractor",
+		"pt.owlsql.extractors.OWLAnnotationsExtractor",
+		"pt.owlsql.extractors.LeavesExtractor",
+		"pt.owlsql.extractors.IntrinsicICExtractor",
+		"pt.owlsql.extractors.ExtrinsicICExtractor",
+		"pt.owlsql.extractors.DisjointnessExtractor"
+	],
+	
+	
+	// If any of the classes above requires parameters in order to work, they
+	// can be given inside the "parameters" object, where each key is the same
+	// class name as used in the "extractors" object. The values here must be
+	// another JSON object where a parameter name is associated with the value
+	// to pass to the extractor. All JSON objects are valid parameters, and it
+	// is up to the implementation to use this parameter values. If no
+	// parameters are necessary, there is no need to include that particular
+	// exttractor class in this object.
+	
+	"parameters": {
+		"pt.owlsql.extractors.NamesExtractor": {
+			"properties": [
+				"http://www.w3.org/2000/01/rdf-schema#label"
+			]
+		},
+		"pt.owlsql.extractors.OWLAnnotationsExtractor": {
+			"properties": [
+				"http://www.co-ode.org/ontologies/pizza/pizza.owl#hasTopping"
+			]
+		},
+		"pt.owlsql.extractors.IntrinsicICExtractor": {
+			"zhou_k": 0.5
+		}
+	}
+}

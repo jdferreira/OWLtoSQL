@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<owlsql>
+    <!-- This file contains the information needed to extract information from OWL files. -->
+
+    <!--
+        You can give some variables to be used further down on the rest of this file. For a variable with name
+        "var", you can refer to its value as "${var}" in the rest of the XML content. It will be replaced by the
+        value of that variable. Notice that in the following case
+
+        <variable name="A" value="${C}" />
+        <variable name="B" value="value1" />
+        <variable name="C" value="This is ${B}" />
+
+        ${C} will be translated as "This is value1", but the definition of A issues a warning and is ignored, as the
+        variable C was not defined yet. Using a non-defined parameter is an error further down the file.
+        Also, to escape the $ character double it:
+
+        <variable name="name" value="$$ is a dollar-sign" />
+    -->
+    <variable name="home" value="/home/jferreira/Ontologies" />
+    <variable name="home" value="/home/joao/Documents/Ontologies" />
+
+    <!--
+        You can specify an ontology to load via the "url" attribute of the <ontology> element.
+        This options expects a valid URL that can be retrieved from the system (file:) or from the web (http:).
+        At least one <ontology> element must be provided.
+    -->
+    <ontology url="file:${home}/pizza.owl" />
+
+    <!--
+        MySQL parameters must be given. The <mysql> element contains attributes for the name of the database and the
+        authentication parameters (username and password). Failing any of these attributes is an error
+    -->
+    <mysql database="remoteowl" username="remoteowluser" password="remoteowlpass" />
+
+    <!--
+        One or more <extractor> elements can be given. Each one is specified using the "class" attribute, which must be
+        the binary name of a Java class that implements the pt.owlsql.OWLExtractor abstract class. If the extractor
+        requires any other parameter itself, it can be given inside the <extractor> element with the <parameter>
+        element. This element must have the attribute "name". The optional attribute "list" can also be given. If given
+        and its value is "true", the content of the <parameter> element must be a sequence of <item> elements, where
+        each element contains the "value" attribute. Otherwise, the <parameter> element must have the "value" attribute.
+    -->
+    
+    <!--
+        Zero or more <executable> elements can also be given. These are similar to the <extractor> element, where the
+        "class" attribute specifies the name of a Java class that must be executed. In this case, the class is not
+        an implementation of pt.owlsql.OWLExtractor, but of the more generic pt.owlsql.Executable class. As before,
+        these can contain <parameter> sub-elements to specify parameters to be used at runtime.
+        
+        An example:
+        <executable class="pt.owlsql.executables.MyExampleExecutable>
+            <parameter name="attempts" value="3" />
+        </executable>
+        
+        Note that you can mix executables and extractors. They will always be executed in the order given in this
+        configuration file.
+    -->
+    
+    <!--
+        Both extractors and executables must have a 0-argument constructor
+    -->
+    
+    <extractor class="pt.owlsql.extractors.SQLCoreUtils" />
+    <extractor class="pt.owlsql.extractors.NamesExtractor">
+        <parameter name="properties" list="true">
+            <item value="http://www.w3.org/2000/01/rdf-schema#label" />
+        </parameter>
+    </extractor>
+    <extractor class="pt.owlsql.extractors.HierarchyExtractor" />
+    <extractor class="pt.owlsql.extractors.AnnotationsExtractor">
+        <!--
+            pt.owlsql.extractors.AnnotationsExtractor needs to know which properties are used to fetch the annotations
+            of a model.
+        -->
+        <parameter name="properties" list="true">
+            <item value="http://www.co-ode.org/ontologies/pizza/pizza.owl#hasTopping" />
+        </parameter>
+    </extractor>
+    <extractor class="pt.owlsql.extractors.LeavesExtractor" />
+    <extractor class="pt.owlsql.extractors.IntrinsicICExtractor">
+        <parameter name="zhou_k" value="0.5" />
+    </extractor>
+    <extractor class="pt.owlsql.extractors.ExtrinsicICExtractor" />
+    <extractor class="pt.owlsql.extractors.DisjointnessExtractor" />
+    
+    
+    
+    
+</owlsql>
