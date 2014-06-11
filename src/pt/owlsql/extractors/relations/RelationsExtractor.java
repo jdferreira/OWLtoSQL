@@ -20,13 +20,8 @@ import pt.owlsql.extractors.SQLCoreUtils;
 
 public final class RelationsExtractor extends OWLExtractor {
     
-    private final SQLCoreUtils utils;
+    private final SQLCoreUtils utils = getExtractor(SQLCoreUtils.class);
     private PreparedStatement getRelationsStatement;
-    
-    
-    public RelationsExtractor() throws SQLException {
-        utils = getExtractor(SQLCoreUtils.class);
-    }
     
     
     @SuppressWarnings("resource")

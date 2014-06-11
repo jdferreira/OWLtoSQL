@@ -15,16 +15,9 @@ import pt.owlsql.OWLExtractor;
 
 public final class ExtrinsicICExtractor extends OWLExtractor {
     
-    private final SQLCoreUtils utils;
+    private final SQLCoreUtils utils = getExtractor(SQLCoreUtils.class);
     
     private PreparedStatement getICStatement;
-    
-    
-    public ExtrinsicICExtractor() throws SQLException {
-        utils = getExtractor(SQLCoreUtils.class);
-        getExtractor(HierarchyExtractor.class);
-        getExtractor(OWLAnnotationsExtractor.class);
-    }
     
     
     @SuppressWarnings("resource")
@@ -34,7 +27,7 @@ public final class ExtrinsicICExtractor extends OWLExtractor {
         
         int nModels;
         try (Statement statement = connection.createStatement()) {
-            statement.execute("DROP TABLE extrinsic_ic");
+            statement.execute("DROP TABLE IF EXISTS extrinsic_ic");
             statement.execute("CREATE TABLE extrinsic_ic (class INT PRIMARY KEY, ic DOUBLE)");
             
             // Get the number of all annotated entities

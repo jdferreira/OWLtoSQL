@@ -20,9 +20,9 @@ import com.google.gson.JsonElement;
 
 public final class IntrinsicICExtractor extends OWLExtractor {
     
-    private final SQLCoreUtils utils;
-    private final HierarchyExtractor ancestry;
-    private final LeavesExtractor leaves;
+    private final SQLCoreUtils utils = getExtractor(SQLCoreUtils.class);
+    private final HierarchyExtractor ancestry = getExtractor(HierarchyExtractor.class);
+    private final LeavesExtractor leaves = getExtractor(LeavesExtractor.class);
     
     private double zhouK;
     private double secoIC;
@@ -35,13 +35,6 @@ public final class IntrinsicICExtractor extends OWLExtractor {
     private double log_mD1;
     
     private PreparedStatement getICStatement;
-    
-    
-    public IntrinsicICExtractor() throws SQLException {
-        utils = getExtractor(SQLCoreUtils.class);
-        ancestry = getExtractor(HierarchyExtractor.class);
-        leaves = getExtractor(LeavesExtractor.class);
-    }
     
     
     private void calculate(OWLClass owlClass) throws SQLException {

@@ -2,7 +2,6 @@
 <classpath>
 	<classpathentry kind="src" path="src"/>
 	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER/org.eclipse.jdt.internal.debug.ui.launcher.StandardVMType/JavaSE-1.7"/>
-	<classpathentry kind="lib" path="lib/mysql/mysql-connector-java-5.1.27-bin.jar"/>
 	<classpathentry kind="lib" path="lib/owlapi/owlapi-3.4.8.jar" sourcepath="lib/owlapi/owlapi-3.4.8-sources.jar">
 		<attributes>
 			<attribute name="javadoc_location" value="jar:file:/home/joao/Dropbox/Projects/OWLinRAM/lib/owlapi/owlapi-3.4.8-javadoc.jar!/"/>
@@ -13,5 +12,6 @@
 			<attribute name="javadoc_location" value="jar:platform:/resource/OWLtoSQL/lib/gson/gson-2.2.4-javadoc.jar!/"/>
 		</attributes>
 	</classpathentry>
+	<classpathentry kind="lib" path="lib/mysql/mysql-connector-java-5.1.31-bin.jar" sourcepath="lib/mysql/mysql-connector-java-5.1.31-bin.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>

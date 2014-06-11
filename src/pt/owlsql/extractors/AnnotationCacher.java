@@ -23,17 +23,11 @@ import com.google.gson.JsonElement;
 public final class AnnotationCacher extends Cacher {
     
     private BufferedReader fileReader;
-    private boolean wipe;
+    private boolean wipe = false;
     private String corpus;
     
-    private final SQLCoreUtils utils;
+    private final SQLCoreUtils utils = getExtractor(SQLCoreUtils.class);
     private PreparedStatement getTransitiveAnnotations;
-    
-    
-    public AnnotationCacher() throws SQLException {
-        utils = getExtractor(SQLCoreUtils.class);
-        wipe = false;
-    }
     
     
     @Override

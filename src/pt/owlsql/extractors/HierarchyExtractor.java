@@ -30,12 +30,7 @@ public final class HierarchyExtractor extends OWLExtractor {
     private PreparedStatement selectAncestryStatement;
     private PreparedStatement selectDescendantsSizeStatement;
     private PreparedStatement selectDescendantsStatement;
-    private final SQLCoreUtils utils;
-    
-    
-    public HierarchyExtractor() throws SQLException {
-        utils = getExtractor(SQLCoreUtils.class);
-    }
+    private final SQLCoreUtils utils = getExtractor(SQLCoreUtils.class);
     
     
     @SuppressWarnings("resource")

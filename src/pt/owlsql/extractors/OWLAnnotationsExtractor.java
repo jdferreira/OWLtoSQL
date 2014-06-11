@@ -26,7 +26,7 @@ import pt.owlsql.OWLExtractor;
 
 public final class OWLAnnotationsExtractor extends OWLExtractor {
     
-    private final SQLCoreUtils utils;
+    private final SQLCoreUtils utils = getExtractor(SQLCoreUtils.class);
     private PreparedStatement getTransitiveEntities;
     private PreparedStatement getTransitiveAnnotations;
     
@@ -34,16 +34,12 @@ public final class OWLAnnotationsExtractor extends OWLExtractor {
     private boolean update;
     
     
-    public OWLAnnotationsExtractor() throws SQLException {
-        utils = getExtractor(SQLCoreUtils.class);
-    }
-    
-    
     @Override
     protected void extract(Set<OWLOntology> ontologies) throws SQLException {
         @SuppressWarnings("resource")
         Statement statement = getConnection().createStatement();
         
+        // TODO use the "annotations" table from AnnotationCache 
         statement.execute("CREATE TABLE IF NOT EXISTS owl_annotations ("
                 + "entity INT,"
                 + "property INT,"

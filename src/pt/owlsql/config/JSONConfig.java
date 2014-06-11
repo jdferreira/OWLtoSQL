@@ -61,7 +61,6 @@ public final class JSONConfig {
             }
             return sb.toString();
         }
-        
     }
     
     
@@ -74,8 +73,7 @@ public final class JSONConfig {
     private static String password;
     private static String username;
     
-    private static final Hashtable<Class<? extends Extractor>, Hashtable<String, JsonElement>> parameters = new Hashtable<>();
-    private static final ArrayList<Class<? extends Extractor>> extractorClasses = new ArrayList<>();
+    private static final ArrayList<ExtractorSpec<?>> extractorSpecs = new ArrayList<>();
     
     private static final ArrayList<URI> ontologies = new ArrayList<>();
     private static final Hashtable<String, String> variables = new Hashtable<>();
@@ -221,52 +219,48 @@ public final class JSONConfig {
     }
     
     
-    // private static void processExtractor(JsonObject object) throws JSONException {
-    // JsonElement classnameElement = object.remove("class");
-    // if (classnameElement == null)
-    // throw new JSONException("needs a \"class\" element");
-    // else if (!classnameElement.isJsonPrimitive() || !classnameElement.getAsJsonPrimitive().isString())
-    // throw new JSONException("must be a string", "class");
-    // String className;
-    // try {
-    // className = resolve(classnameElement.getAsString());
-    // }
-    // catch (JSONException e) {
-    // throw e.withPrefix("class");
-    // }
-    //
-    // Class<?> cls;
-    // try {
-    // cls = Class.forName(className);
-    // }
-    // catch (ClassNotFoundException e) {
-    // throw new JSONException("class not found", "class");
-    // }
-    //
-    // try {
-    // validateClass(cls);
-    // }
-    // catch (Exception e) {
-    // throw new JSONException(e.getMessage(), e, "class");
-    // }
-    //
-    // Class<? extends Extractor> actualClass = cls.asSubclass(Extractor.class);
-    // extractorClasses.add(actualClass);
-    //
-    // // Now let's find more options
-    // Hashtable<String, JsonElement> table;
-    // moreOptions.put(actualClass, table = new Hashtable<>());
-    // for (Entry<String, JsonElement> entry : object.entrySet()) {
-    // table.put(entry.getKey(), entry.getValue());
-    // }
-    // }
+    private static Class<? extends Extractor> getExtractorClass(String classname) throws JSONException {
+        Class<?> cls;
+        try {
+            cls = Class.forName(classname);
+        }
+        catch (ClassNotFoundException e) {
+            throw new JSONException("class not found");
+        }
+        validateClass(cls);
+        
+        return cls.asSubclass(Extractor.class);
+    }
     
     
-    // private static void processExtractor(String className) throws JSONException {
-    // JsonObject object = new JsonObject();
-    // object.addProperty("class", className);
-    // processExtractor(object);
-    // }
+    private static ExtractorSpec<?> processExtractor(JsonObject object) throws JSONException {
+        if (!object.has("class"))
+            throw new JSONException("must have a \"class\" element");
+        
+        JsonElement classElement = object.remove("class");
+        if (!classElement.isJsonPrimitive() || !classElement.getAsJsonPrimitive().isString())
+            throw new JSONException("must be a string", "class");
+        
+        Class<? extends Extractor> extractorClass;
+        try {
+            extractorClass = getExtractorClass(classElement.getAsString());
+        }
+        catch (JSONException e) {
+            throw e.withPrefix("class");
+        }
+        
+        Hashtable<String, JsonElement> parameters = new Hashtable<>();
+        for (Entry<String, JsonElement> entry : object.entrySet()) {
+            parameters.put(entry.getKey(), entry.getValue());
+        }
+        return new ExtractorSpec<>(extractorClass, parameters);
+    }
+    
+    
+    private static ExtractorSpec<?> processExtractor(String classname) throws JSONException {
+        Class<? extends Extractor> extractorClass = getExtractorClass(classname);
+        return new ExtractorSpec<>(extractorClass);
+    }
     
     
     private static void processExtractors() throws JSONException {
@@ -279,47 +273,29 @@ public final class JSONConfig {
         
         for (int i = 0; i < array.size(); i++) {
             JsonElement inner = array.get(i);
-            if (!inner.isJsonPrimitive() || !inner.getAsJsonPrimitive().isString())
-                throw new JSONException("must be a string", "extractors", "[" + i + "]");
+            ExtractorSpec<?> spec;
+            if (inner.isJsonPrimitive() && inner.getAsJsonPrimitive().isString()) {
+                try {
+                    spec = processExtractor(resolve(inner.getAsString()));
+                }
+                catch (JSONException e) {
+                    throw e.withPrefix("extractors", "[" + i + "]");
+                }
+            }
+            else if (inner.isJsonObject()) {
+                try {
+                    spec = processExtractor(inner.getAsJsonObject());
+                }
+                catch (JSONException e) {
+                    throw e.withPrefix("extractors", "[" + i + "]");
+                }
+            }
+            else
+                throw new JSONException("must be either a string or a JSON object", "extractors", "[" + i + "]");
             
-            // if (inner.isJsonObject()) {
-            // try {
-            // processExtractor(inner.getAsJsonObject());
-            // }
-            // catch (JSONException e) {
-            // throw e.withPrefix("extractors", "[" + i + "]");
-            // }
-            // }
-            // else {
-            // throw new JSONException("must be a JSON object", "extractors", "[" + i + "]");
-            // }
-            
-            String className;
-            try {
-                className = resolve(inner.getAsString());
-            }
-            catch (JSONException e) {
-                throw e.withPrefix("extractors", "[" + i + "]");
-            }
-            
-            Class<?> cls;
-            try {
-                cls = Class.forName(className);
-            }
-            catch (ClassNotFoundException e) {
-                throw new JSONException("class not found", "extractors", "[" + i + "]");
-            }
-            
-            try {
-                validateClass(cls);
-            }
-            catch (JSONException e) {
-                throw e.withPrefix("extractors", "[" + i + "]");
-            }
-            
-            Class<? extends Extractor> actualClass = cls.asSubclass(Extractor.class);
-            extractorClasses.add(actualClass);
+            extractorSpecs.add(spec);
         }
+        
     }
     
     
@@ -348,38 +324,6 @@ public final class JSONConfig {
             }
             
             ontologies.add(url);
-        }
-    }
-    
-    
-    private static void processParameters() throws JSONException {
-        JsonElement element = doc.get("parameters");
-        if (element == null)
-            return;
-        else if (!element.isJsonObject())
-            throw new JSONException("must be a JSON object", "parameters");
-        JsonObject object = element.getAsJsonObject();
-        
-        for (Entry<String, JsonElement> entry : object.entrySet()) {
-            Class<? extends Extractor> extractorClass = null;
-            for (Class<? extends Extractor> potential : extractorClasses) {
-                if (potential.getName().equals(entry.getKey())) {
-                    extractorClass = potential;
-                    break;
-                }
-            }
-            if (extractorClass == null)
-                throw new JSONException("\"" + entry.getKey() + "\" is not an extractor", "parameters");
-            
-            JsonElement value = entry.getValue();
-            if (!value.isJsonObject())
-                throw new JSONException("must be a JSON object", "parameters", entry.getKey());
-            
-            Hashtable<String, JsonElement> table = new Hashtable<>();
-            parameters.put(extractorClass, table);
-            for (Entry<String, JsonElement> innerEntry : value.getAsJsonObject().entrySet()) {
-                table.put(innerEntry.getKey(), innerEntry.getValue());
-            }
         }
     }
     
@@ -474,7 +418,6 @@ public final class JSONConfig {
         processSQLParams();
         processOntologies();
         processExtractors();
-        processParameters();
     }
     
     
@@ -499,15 +442,11 @@ public final class JSONConfig {
             throw new JSONException("must not be a member class");
         if (cls.isSynthetic())
             throw new JSONException("must not be a synthetic class");
+        
         if (Modifier.isAbstract(cls.getModifiers()))
             throw new JSONException("must not be an abstract class");
-        
         if (!Modifier.isFinal(cls.getModifiers()))
             throw new JSONException("must be a final class");
-        
-        // No duplicate extractors allowed
-        if (extractorClasses.contains(cls))
-            throw new JSONException("duplicate extractor detected");
     }
     
     
@@ -516,8 +455,8 @@ public final class JSONConfig {
     }
     
     
-    public static ArrayList<Class<? extends Extractor>> getExtractorClasses() {
-        return new ArrayList<>(extractorClasses);
+    public static ArrayList<ExtractorSpec<?>> getExtractorSpecs() {
+        return extractorSpecs;
     }
     
     
@@ -528,11 +467,6 @@ public final class JSONConfig {
     
     public static ArrayList<URI> getOntologiesURI() {
         return new ArrayList<>(ontologies);
-    }
-    
-    
-    public static Hashtable<String, JsonElement> getParameters(Class<? extends Extractor> cls) {
-        return parameters.get(cls);
     }
     
     

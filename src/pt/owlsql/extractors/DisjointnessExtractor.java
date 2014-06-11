@@ -40,14 +40,9 @@ public final class DisjointnessExtractor extends OWLExtractor {
         }
     }
     
-    private final SQLCoreUtils utils;
+    private final SQLCoreUtils utils = getExtractor(SQLCoreUtils.class);
     private PreparedStatement getDisjointStatement;
     private PreparedStatement areDisjointStatement;
-    
-    
-    public DisjointnessExtractor() throws SQLException {
-        utils = getExtractor(SQLCoreUtils.class);
-    }
     
     
     @Override

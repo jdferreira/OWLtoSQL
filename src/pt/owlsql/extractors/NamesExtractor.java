@@ -27,20 +27,14 @@ import pt.owlsql.OWLExtractor;
 
 public final class NamesExtractor extends OWLExtractor {
     
-    private final SQLCoreUtils utils;
+    private final SQLCoreUtils utils = getExtractor(SQLCoreUtils.class);
     
-    private final ArrayList<OWLAnnotationProperty> properties;
+    private final ArrayList<OWLAnnotationProperty> properties = new ArrayList<>();
     
     private PreparedStatement getAllNames;
     private PreparedStatement getAllNamesOnProperty;
     private PreparedStatement getOneName;
     private PreparedStatement getOneNameOnProperty;
-    
-    
-    public NamesExtractor() throws SQLException {
-        utils = getExtractor(SQLCoreUtils.class);
-        properties = new ArrayList<>();
-    }
     
     
     @Override
@@ -63,7 +57,8 @@ public final class NamesExtractor extends OWLExtractor {
         statement.close();
         
         @SuppressWarnings("resource")
-        PreparedStatement getPriority = getConnection().prepareStatement("SELECT MAX(priority) FROM names WHERE id = ?");
+        PreparedStatement getPriority = getConnection()
+                .prepareStatement("SELECT MAX(priority) FROM names WHERE id = ?");
         @SuppressWarnings("resource")
         PreparedStatement insertName = getConnection()
                 .prepareStatement("INSERT INTO names (id, property, priority, name) VALUES (?, ?, ?, ?)");

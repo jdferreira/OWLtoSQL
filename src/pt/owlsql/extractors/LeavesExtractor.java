@@ -16,19 +16,12 @@ import pt.owlsql.OWLExtractor;
 
 public final class LeavesExtractor extends OWLExtractor {
     
-    private final SQLCoreUtils utils;
+    private final SQLCoreUtils utils = getExtractor(SQLCoreUtils.class);
     
     private PreparedStatement isLeafStatement;
     private PreparedStatement getLeaves;
     private PreparedStatement getLeavesSize;
     private PreparedStatement getNumberOfLeaves;
-    
-    
-    public LeavesExtractor() throws SQLException {
-        // Make sure that we have also have initialized the SQLCoreUtils and FlatAncestryExtractor classes.
-        utils = getExtractor(SQLCoreUtils.class);
-        getExtractor(HierarchyExtractor.class);
-    }
     
     
     @Override

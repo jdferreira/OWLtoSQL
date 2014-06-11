@@ -5,11 +5,13 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.HashSet;
 import java.util.Hashtable;
+import java.util.Map.Entry;
 
 import org.semanticweb.owlapi.apibinding.OWLManager;
 import org.semanticweb.owlapi.model.OWLDataFactory;
 
 import pt.json.JSONException;
+import pt.owlsql.config.ExtractorSpec;
 import pt.owlsql.config.JSONConfig;
 
 import com.google.gson.JsonElement;
@@ -18,26 +20,9 @@ import com.google.gson.JsonElement;
 public abstract class Extractor {
     
     private static Connection connection;
-    private static Hashtable<Class<? extends Extractor>, Extractor> instances = new Hashtable<>();
-    private static HashSet<Extractor> prepared = new HashSet<>();
+    private static Hashtable<Class<? extends Extractor>, Extractor> simpleInstances = new Hashtable<>();
     
     protected static final OWLDataFactory factory = OWLManager.getOWLDataFactory();
-    
-    
-    private static void instanciateSubclasses() {
-        for (Class<? extends Extractor> cls : JSONConfig.getExtractorClasses()) {
-            Extractor extractor;
-            try {
-                extractor = cls.newInstance();
-            }
-            catch (InstantiationException | IllegalAccessException e) {
-                System.err.println("Cannot instantiate " + cls);
-                e.printStackTrace();
-                continue;
-            }
-            instances.put(cls, extractor);
-        }
-    }
     
     
     static void closeConnection() {
@@ -66,8 +51,6 @@ public abstract class Extractor {
             throw new Error("Unable to connect to the specified database", e);
         }
         
-        instanciateSubclasses();
-        
         return connection;
     }
     
@@ -77,16 +60,33 @@ public abstract class Extractor {
     }
     
     
-    public static <U extends Extractor> U getExtractor(Class<U> cls) throws SQLException {
-        if (!instances.containsKey(cls))
-            throw new IllegalArgumentException("Extractor " + cls.getName() + " has not been initialized yet");
-        U result = (U) instances.get(cls);
-        if (!prepared.contains(result)) {
-            result.prepare();
-            prepared.add(result);
+    public static <U extends Extractor> U getExtractor(Class<U> cls) {
+        U cached = (U) simpleInstances.get(cls);
+        if (cached != null)
+            return cached;
+        
+        U extractor;
+        try {
+            extractor = cls.newInstance();
+        }
+        catch (InstantiationException | IllegalAccessException e) {
+            throw new RuntimeException(e);
         }
         
-        return result;
+        if (extractor.getMandatoryOptions().length > 0)
+            throw new RuntimeException("Extractors of type "
+                    + cls.getName()
+                    + " mandate a set of parameters. They cannot be created using this method.");
+        
+        try {
+            extractor.prepare();
+        }
+        catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+        
+        simpleInstances.put(cls, extractor);
+        return extractor;
     }
     
     
@@ -99,8 +99,66 @@ public abstract class Extractor {
     }
     
     
-    protected void processOption(String key, JsonElement element) throws JSONException {
+    protected void processOption(String key, @SuppressWarnings("unused") JsonElement element) throws JSONException {
         throw new JSONException("unexpected parameter on " + getClass().getName(), key);
     }
     
+    
+    static <U extends Extractor> U createFromSpec(ExtractorSpec<U> spec) throws InstantiationException,
+            IllegalAccessException, JSONException {
+        Class<U> cls = spec.getExtractorClass();
+        Hashtable<String, JsonElement> parameters = spec.getParameters();
+        
+        if (parameters.isEmpty()) {
+            U cached = (U) simpleInstances.get(cls);
+            if (cached != null)
+                return cached;
+        }
+        
+        U extractor = cls.newInstance();
+        
+        // Process its options
+        HashSet<String> mandatoryParameters = new HashSet<>();
+        for (String parameterName : extractor.getMandatoryOptions()) {
+            mandatoryParameters.add(parameterName);
+        }
+        
+        for (Entry<String, JsonElement> entry : parameters.entrySet()) {
+            String key = entry.getKey();
+            extractor.processOption(key, entry.getValue());
+            mandatoryParameters.remove(key);
+        }
+        
+        if (mandatoryParameters.size() > 0) {
+            StringBuilder sb = new StringBuilder();
+            String[] params = mandatoryParameters.toArray(new String[mandatoryParameters.size()]);
+            for (int i = 0; i < params.length - 1; i++) {
+                sb.append(", \"").append(params[i]).append("\"");
+            }
+            
+            String options;
+            if (params.length == 1)
+                options = "option \"" + params[0] + "\"";
+            else
+                options = "options " + sb.substring(2) + " and \"" + params[params.length - 1] + "\"";
+            
+            throw new InstantiationException("Failed to provide "
+                    + options
+                    + " to extractor "
+                    + cls.getName());
+        }
+        
+        try {
+            extractor.prepare();
+        }
+        catch (SQLException e) {
+            throw new InstantiationException("Unable to prepare an instance of the class " + cls.getName());
+        }
+        
+        // If no parameters are given, we can cache this extractor
+        if (parameters.isEmpty())
+            simpleInstances.put(cls, extractor);
+        
+        return extractor;
+    }
 }
