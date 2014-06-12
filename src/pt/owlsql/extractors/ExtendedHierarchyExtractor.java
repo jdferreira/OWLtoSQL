@@ -176,12 +176,12 @@ public final class ExtendedHierarchyExtractor extends OWLExtractor {
             System.out.println("... closing the graph because this is a transitive relation");
             try (PreparedStatement stmt = connection.prepareStatement(""
                     + "INSERT IGNORE INTO extended_hierarchy (extension, subclass, superclass, distance) "
-                    + "  SELECT ?, e1.subclass, e2.superclass, e1.distance + 1 "
-                    + "  FROM extended_hierarchy AS e1, extended_hierarchy AS e2 "
-                    + "  WHERE e1.extension = ? AND e2.extension = ? AND "
-                    + "        e1.superclass = e2.subclass AND"
-                    + "        e1.distance = ? AND"
-                    + "        e2.distance = 1")) {
+                    + "SELECT ?, e1.subclass, e2.superclass, e1.distance + 1 "
+                    + "FROM extended_hierarchy AS e1, extended_hierarchy AS e2 "
+                    + "WHERE e1.extension = ? AND e2.extension = ? AND "
+                    + "      e1.superclass = e2.subclass AND"
+                    + "      e1.distance = ? AND"
+                    + "      e2.distance = 1")) {
                 stmt.setString(1, identifier);
                 stmt.setString(2, identifier);
                 stmt.setString(3, identifier);
@@ -222,11 +222,22 @@ public final class ExtendedHierarchyExtractor extends OWLExtractor {
                 + "     extended_hierarchy AS e "
                 + "WHERE h1.superclass = e.subclass AND "
                 + "      h2.subclass = e.superclass AND "
-                + "      e.extension = ?"
+                + "      e.extension = ? AND"
+                + "      h1.distance = ? "
                 + "ON DUPLICATE KEY UPDATE distance = LEAST(extended_hierarchy.distance, VALUES(distance))")) {
             stmt.setString(1, identifier);
             stmt.setString(2, identifier);
-            stmt.executeUpdate();
+            
+            // Add based on different distances in h1. This is a way to divide the huge insert statement into smaller
+            // chunks, and allows a certain amount of visualization either from the output or actually from the state
+            // of the database
+            for (int distance = 0; /* Stop condition is inside the body */; distance++) {
+                stmt.setInt(3, distance);
+                int inserted = stmt.executeUpdate();
+                System.out.println("... inserted " + inserted + " pairs");
+                if (inserted == 0)
+                    break;
+            }
         }
     }
     
