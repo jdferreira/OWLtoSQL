@@ -266,7 +266,7 @@ public final class JSONConfig {
     private static void processExtractors() throws JSONException {
         JsonElement element = doc.get("extractors");
         if (element == null)
-            throw new JSONException("object \"extractors\" is mandatory");
+            return;
         else if (!element.isJsonArray())
             throw new JSONException("must be a JSON array", "extractors");
         JsonArray array = element.getAsJsonArray();

@@ -53,6 +53,11 @@ public final class ExtendedHierarchyExtractor extends OWLExtractor {
         if (!subProperties)
             return;
         
+        System.out.println("finding the subproperties of ");
+        for (OWLObjectProperty property : properties) {
+            System.out.println("- " + property.toStringID());
+        }
+        
         // Store the actual properties given by the user
         ArrayDeque<OWLObjectProperty> toAdd = new ArrayDeque<>(properties);
         
@@ -64,6 +69,7 @@ public final class ExtendedHierarchyExtractor extends OWLExtractor {
             if (properties.contains(property))
                 continue;
             properties.add(property);
+            System.out.println(">>> " + property.toStringID());
             
             for (OWLObjectPropertyExpression propertyExpression : property.getSubProperties(ontologies)) {
                 if (!propertyExpression.isAnonymous())
@@ -131,7 +137,7 @@ public final class ExtendedHierarchyExtractor extends OWLExtractor {
         // __ Else:
         // __ __ insert (A, B, 0)
         try (PreparedStatement stmt = connection.prepareStatement(""
-                + "INSERT INTO extended_hierarchy (extension, subclass, superclass, distance) "
+                + "INSERT IGNORE INTO extended_hierarchy (extension, subclass, superclass, distance) "
                 + "VALUES (?, ?, ?, ?)")) {
             stmt.setString(1, identifier);
             
@@ -151,12 +157,11 @@ public final class ExtendedHierarchyExtractor extends OWLExtractor {
                             stmt.setInt(2, id1);
                             stmt.setInt(3, id2);
                             stmt.setInt(4, distance);
-                            stmt.addBatch();
+                            stmt.execute();
                             
                             counter++;
                             if (counter % 1000 == 0) {
                                 System.out.println("... " + counter + " relations found ...");
-                                stmt.executeBatch();
                             }
                         }
                     }
@@ -214,11 +219,11 @@ public final class ExtendedHierarchyExtractor extends OWLExtractor {
                 + "SELECT ?, h1.subclass, h2.superclass, h1.distance + h2.distance + e.distance "
                 + "FROM hierarchy AS h1, "
                 + "     hierarchy AS h2, "
-                + "     extended_hirarchy AS e "
+                + "     extended_hierarchy AS e "
                 + "WHERE h1.superclass = e.subclass AND "
                 + "      h2.subclass = e.superclass AND "
                 + "      e.extension = ?"
-                + "ON DUPLICATE KEY UPDATE distance = LEAST(distance, VALUES(distance))")) {
+                + "ON DUPLICATE KEY UPDATE distance = LEAST(extended_hierarchy.distance, VALUES(distance))")) {
             stmt.setString(1, identifier);
             stmt.setString(2, identifier);
             stmt.executeUpdate();
