@@ -61,6 +61,7 @@ public abstract class Extractor {
     
     
     public static <U extends Extractor> U getExtractor(Class<U> cls) {
+        @SuppressWarnings("unchecked")
         U cached = (U) simpleInstances.get(cls);
         if (cached != null)
             return cached;
@@ -110,6 +111,7 @@ public abstract class Extractor {
         Hashtable<String, JsonElement> parameters = spec.getParameters();
         
         if (parameters.isEmpty()) {
+            @SuppressWarnings("unchecked")
             U cached = (U) simpleInstances.get(cls);
             if (cached != null)
                 return cached;
