@@ -433,20 +433,20 @@ public final class JSONConfig {
                     + Cacher.class.getName());
         
         if (cls.isAnonymousClass())
-            throw new JSONException("must not be an anonymous class");
+            throw new JSONException(cls.getName() + " must not be an anonymous class");
         if (cls.isInterface())
-            throw new JSONException("must not be an interface");
+            throw new JSONException(cls.getName() + " must not be an interface");
         if (cls.isLocalClass())
-            throw new JSONException("must not be a local class");
+            throw new JSONException(cls.getName() + " must not be a local class");
         if (cls.isMemberClass())
-            throw new JSONException("must not be a member class");
+            throw new JSONException(cls.getName() + " must not be a member class");
         if (cls.isSynthetic())
-            throw new JSONException("must not be a synthetic class");
+            throw new JSONException(cls.getName() + " must not be a synthetic class");
         
         if (Modifier.isAbstract(cls.getModifiers()))
-            throw new JSONException("must not be an abstract class");
+            throw new JSONException(cls.getName() + " must not be an abstract class");
         if (!Modifier.isFinal(cls.getModifiers()))
-            throw new JSONException("must be a final class");
+            throw new JSONException(cls.getName() + " must be a final class");
     }
     
     

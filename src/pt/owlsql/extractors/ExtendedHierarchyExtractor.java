@@ -133,9 +133,9 @@ public final class ExtendedHierarchyExtractor extends OWLExtractor {
         // Let's insert the direct relations on the table
         // If Subclass(A ObjectSomeValuesFrom(P B)):
         // __ If A == B:
-        // __ __ insert (A, B, 1)
-        // __ Else:
         // __ __ insert (A, B, 0)
+        // __ Else:
+        // __ __ insert (A, B, 1)
         try (PreparedStatement stmt = connection.prepareStatement(""
                 + "INSERT IGNORE INTO extended_hierarchy (extension, subclass, superclass, distance) "
                 + "VALUES (?, ?, ?, ?)")) {

@@ -319,7 +319,7 @@ public class LoadAndExtract {
             wipeDatabase();
         
         // TODO What this should do is this: If the set of loaded ontologies is different from the set of ontologies
-        // already inlcuded in the database, a full wipe should be performed!
+        // already included in the database, a full wipe should be performed!
         setupTables(); // Setup fundamental tables in the database
         
         extractAll(); // Extract all the information

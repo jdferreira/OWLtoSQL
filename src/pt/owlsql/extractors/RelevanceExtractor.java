@@ -16,7 +16,7 @@ import org.semanticweb.owlapi.model.OWLOntology;
 import pt.owlsql.OWLExtractor;
 
 
-public class RelevanceExtractor extends OWLExtractor {
+public final class RelevanceExtractor extends OWLExtractor {
     
     private static final int MAX = Integer.MAX_VALUE;
     
