@@ -27,7 +27,7 @@ public final class LeavesExtractor extends OWLExtractor {
     @Override
     protected void extract(Set<OWLOntology> ontologies) throws SQLException {
         @SuppressWarnings("resource")
-        Statement statement = getConnection().createStatement();
+        final Statement statement = getConnection().createStatement();
         
         // Create the table that contains the IRI's of OWLEntities
         statement.execute("DROP TABLE IF EXISTS leaves");
@@ -46,7 +46,7 @@ public final class LeavesExtractor extends OWLExtractor {
     
     @Override
     protected void prepare() throws SQLException {
-        Connection connection = getConnection();
+        final Connection connection = getConnection();
         
         isLeafStatement = connection.prepareStatement("SELECT COUNT(*) FROM leaves WHERE id = ?");
         getLeaves = connection.prepareStatement(""
@@ -63,9 +63,9 @@ public final class LeavesExtractor extends OWLExtractor {
     }
     
     
-    public HashSet<OWLClass> getLeafDescendants(OWLClass owlClass) throws SQLException {
-        getLeaves.setInt(1, utils.getID(owlClass));
-        HashSet<OWLClass> result = new HashSet<>();
+    public HashSet<OWLClass> getLeafDescendants(int id) throws SQLException {
+        getLeaves.setInt(1, id);
+        final HashSet<OWLClass> result = new HashSet<>();
         try (ResultSet resultSet = getLeaves.executeQuery()) {
             while (resultSet.next())
                 result.add((OWLClass) utils.getEntity(resultSet.getInt(1)));
@@ -74,12 +74,22 @@ public final class LeavesExtractor extends OWLExtractor {
     }
     
     
-    public int getLeafDescendantsSize(OWLClass owlClass) throws SQLException {
-        getLeavesSize.setInt(1, utils.getID(owlClass));
+    public HashSet<OWLClass> getLeafDescendants(OWLClass owlClass) throws SQLException {
+        return getLeafDescendants(utils.getID(owlClass));
+    }
+    
+    
+    public int getLeafDescendantsSize(int id) throws SQLException {
+        getLeavesSize.setInt(1, id);
         try (ResultSet resultSet = getLeavesSize.executeQuery()) {
             resultSet.next();
             return resultSet.getInt(1);
         }
+    }
+    
+    
+    public int getLeafDescendantsSize(OWLClass owlClass) throws SQLException {
+        return getLeafDescendantsSize(utils.getID(owlClass));
     }
     
     
@@ -91,11 +101,17 @@ public final class LeavesExtractor extends OWLExtractor {
     }
     
     
-    public boolean isLeaf(OWLClass owlClass) throws SQLException {
-        isLeafStatement.setInt(1, utils.getID(owlClass));
+    public boolean isLeaf(int id) throws SQLException {
+        isLeafStatement.setInt(1, id);
         try (ResultSet resultSet = isLeafStatement.executeQuery()) {
             resultSet.next();
             return resultSet.getInt(1) == 0;
         }
+    }
+    
+    
+    // TODO All methods that take OWLClass should also take int
+    public boolean isLeaf(OWLClass owlClass) throws SQLException {
+        return isLeaf(utils.getID(owlClass));
     }
 }

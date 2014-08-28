@@ -31,41 +31,6 @@ public final class AnnotationCacher extends Cacher {
     
     
     @Override
-    protected String[] getMandatoryOptions() {
-        return new String[] { "file", "corpus" };
-    }
-    
-    
-    @Override
-    protected void processOption(String key, JsonElement element) throws JSONException {
-        if (key.equals("file")) {
-            if (!element.isJsonPrimitive() || !element.getAsJsonPrimitive().isString())
-                throw new JSONException("must be a string");
-            try {
-                fileReader = new BufferedReader(new FileReader(element.getAsString()));
-            }
-            catch (FileNotFoundException e) {
-                throw new JSONException(e.getMessage(), e);
-            }
-        }
-        else if (key.equals("wipe")) {
-            if (!element.isJsonPrimitive() || !element.getAsJsonPrimitive().isBoolean())
-                throw new JSONException("must be a boolean");
-            wipe = element.getAsBoolean();
-        }
-        else if (key.equals("corpus")) {
-            if (!element.isJsonPrimitive() || !element.getAsJsonPrimitive().isString())
-                throw new JSONException("must be a string");
-            corpus = element.getAsString();
-            if (corpus.length() > 256)
-                throw new JSONException("must have at most 256 characters");
-        }
-        else
-            super.processOption(key, element);
-    }
-    
-    
-    @Override
     protected void cache() throws SQLException {
         // We read the file line by line, split each line on whitespace into three parts and use each triplet to create
         // an annotation in the database.
@@ -143,29 +108,75 @@ public final class AnnotationCacher extends Cacher {
     
     
     @Override
+    protected String[] getMandatoryOptions() {
+        return new String[] { "file", "corpus" };
+    }
+    
+    
+    @Override
     protected void prepare() throws SQLException {
         Connection connection = getConnection();
         
         getTransitiveAnnotations = connection.prepareStatement(""
-                + "SELECT hierarchy.superclass "
-                + "FROM ("
-                + "      SELECT DISTINCT annotation FROM annotations WHERE entity = ?"
+                + "SELECT DISTINCT hierarchy.superclass "
+                + "FROM (SELECT DISTINCT annotation "
+                + "      FROM annotations"
+                + "      WHERE entity = ?"
                 + "     ) AS t,"
                 + "JOIN hierarchy ON hierarchy.subclass = t.annotation");
+    }
+    
+    
+    @Override
+    protected void processOption(String key, JsonElement element) throws JSONException {
+        if (key.equals("file")) {
+            if (!element.isJsonPrimitive() || !element.getAsJsonPrimitive().isString())
+                throw new JSONException("must be a string");
+            try {
+                fileReader = new BufferedReader(new FileReader(element.getAsString()));
+            }
+            catch (FileNotFoundException e) {
+                throw new JSONException(e.getMessage(), e);
+            }
+        }
+        else if (key.equals("wipe")) {
+            if (!element.isJsonPrimitive() || !element.getAsJsonPrimitive().isBoolean())
+                throw new JSONException("must be a boolean");
+            wipe = element.getAsBoolean();
+        }
+        else if (key.equals("corpus")) {
+            if (!element.isJsonPrimitive() || !element.getAsJsonPrimitive().isString())
+                throw new JSONException("must be a string");
+            corpus = element.getAsString();
+            if (corpus.length() > 256)
+                throw new JSONException("must have at most 256 characters");
+        }
+        else
+            super.processOption(key, element);
     }
     
     
     public HashSet<OWLClass> getTransitiveAnnotations(String entity) throws SQLException {
         HashSet<OWLClass> result = new HashSet<>();
         
-        getTransitiveAnnotations.setString(1, entity);
-        
-        try (ResultSet resultSet = getTransitiveAnnotations.executeQuery()) {
-            while (resultSet.next()) {
-                result.add(utils.getEntity(resultSet.getInt(1)).asOWLClass());
-            }
+        for (int id : getTransitiveAnnotationsID(entity)) {
+            result.add(utils.getEntity(id).asOWLClass());
         }
         
         return result;
+    }
+    
+    
+    public int[] getTransitiveAnnotationsID(String entity) throws SQLException {
+        getTransitiveAnnotations.setString(1, entity);
+        try (ResultSet resultSet = getTransitiveAnnotations.executeQuery()) {
+            int[] result = new int[countRows(resultSet)];
+            int i = 0;
+            while (resultSet.next()) {
+                result[i] = resultSet.getInt(1);
+                i++;
+            }
+            return result;
+        }
     }
 }

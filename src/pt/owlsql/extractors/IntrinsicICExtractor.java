@@ -60,56 +60,55 @@ public final class IntrinsicICExtractor extends OWLExtractor {
     }
     
     
-    @SuppressWarnings("resource")
     @Override
     protected void extract(Set<OWLOntology> ontologies) throws SQLException {
         Connection connection = getConnection();
         
-        Statement statement = connection.createStatement();
-        statement.execute("DROP TABLE IF EXISTS intrinsic_ic");
-        statement.execute("CREATE TABLE intrinsic_ic ("
-                + "class INT,"
-                + "seco DOUBLE,"
-                + "zhou DOUBLE,"
-                + "sanchez DOUBLE,"
-                + "leaves DOUBLE,"
-                + "UNIQUE (class))");
-        statement.close();
-        
-        PreparedStatement insertStatement = connection.prepareStatement(""
-                + "INSERT INTO intrinsic_ic (class, seco, zhou, sanchez, leaves) "
-                + "VALUES (?, ?, ?, ?, ?)");
-        
-        System.out.println("Finding all the intrinsic IC values (SECO, ZHOU, SANCHEZ and LEAVES)");
-        
-        // Start by getting a reference to all the classes
-        HashSet<OWLClass> allClasses = utils.getAllEntities(EntityType.CLASS);
-        log_tC = Math.log(allClasses.size());
-        log_tL = Math.log(leaves.getNumberOfLeaves());
-        
-        maxDepth = ancestry.getMaxDepth();
-        log_mD1 = Math.log(maxDepth + 1);
-        
-        int counter = 0;
-        for (OWLClass owlClass : allClasses) {
-            calculate(owlClass);
-            int id = utils.getID(owlClass);
-            insertStatement.setInt(1, id);
-            insertStatement.setDouble(2, secoIC);
-            insertStatement.setDouble(3, zhouIC);
-            insertStatement.setDouble(4, sanchezIC);
-            insertStatement.setDouble(5, leavesIC);
-            insertStatement.addBatch();
-            
-            counter++;
-            if (counter % 1000 == 0) {
-                System.out.println("... IC for " + counter + " classes found ...");
-                insertStatement.executeBatch();
-            }
+        try (Statement statement = connection.createStatement()) {
+            statement.execute("DROP TABLE IF EXISTS intrinsic_ic");
+            statement.execute("CREATE TABLE intrinsic_ic ("
+                    + "class INT,"
+                    + "seco DOUBLE,"
+                    + "zhou DOUBLE,"
+                    + "sanchez DOUBLE,"
+                    + "leaves DOUBLE,"
+                    + "UNIQUE (class))");
         }
         
-        insertStatement.executeBatch();
-        insertStatement.close();
+        try (PreparedStatement insertStatement = connection.prepareStatement(""
+                + "INSERT INTO intrinsic_ic (class, seco, zhou, sanchez, leaves) "
+                + "VALUES (?, ?, ?, ?, ?)")) {
+            
+            System.out.println("Finding all the intrinsic IC values (SECO, ZHOU, SANCHEZ and LEAVES)");
+            
+            // Start by getting a reference to all the classes
+            HashSet<OWLClass> allClasses = utils.getAllEntities(EntityType.CLASS);
+            log_tC = Math.log(allClasses.size());
+            log_tL = Math.log(leaves.getNumberOfLeaves());
+            
+            maxDepth = ancestry.getMaxDepth();
+            log_mD1 = Math.log(maxDepth + 1);
+            
+            int counter = 0;
+            for (OWLClass owlClass : allClasses) {
+                calculate(owlClass);
+                int id = utils.getID(owlClass);
+                insertStatement.setInt(1, id);
+                insertStatement.setDouble(2, secoIC);
+                insertStatement.setDouble(3, zhouIC);
+                insertStatement.setDouble(4, sanchezIC);
+                insertStatement.setDouble(5, leavesIC);
+                insertStatement.addBatch();
+                
+                counter++;
+                if (counter % 1000 == 0) {
+                    System.out.println("... IC for " + counter + " classes found ...");
+                    insertStatement.executeBatch();
+                }
+            }
+            
+            insertStatement.executeBatch();
+        }
     }
     
     
@@ -146,8 +145,9 @@ public final class IntrinsicICExtractor extends OWLExtractor {
     }
     
     
-    public double getIC(OWLClass cls, IntrinsicICMethod method) throws SQLException {
-        getICStatement.setInt(1, utils.getID(cls));
+    public double getIC(int id, IntrinsicICMethod method) throws SQLException {
+        getICStatement.setInt(1, id);
+        
         try (ResultSet resultsSet = getICStatement.executeQuery()) {
             if (resultsSet.next())
                 if (method == IntrinsicICMethod.SECO)
@@ -161,5 +161,10 @@ public final class IntrinsicICExtractor extends OWLExtractor {
         }
         
         return -1;
+    }
+    
+    
+    public double getIC(OWLClass cls, IntrinsicICMethod method) throws SQLException {
+        return getIC(utils.getID(cls), method);
     }
 }

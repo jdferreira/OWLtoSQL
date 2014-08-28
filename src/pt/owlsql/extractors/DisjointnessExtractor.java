@@ -19,6 +19,28 @@ import pt.owlsql.OWLExtractor;
 
 public final class DisjointnessExtractor extends OWLExtractor {
     
+    public static class IntPair {
+        private int first;
+        private int second;
+        
+        
+        public IntPair(int first, int second) {
+            this.first = first;
+            this.second = second;
+        }
+        
+        
+        public int getFirst() {
+            return first;
+        }
+        
+        
+        public int getSecond() {
+            return second;
+        }
+    }
+    
+    
     public static class OWLClassPair {
         private OWLClass first;
         private OWLClass second;
@@ -39,6 +61,7 @@ public final class DisjointnessExtractor extends OWLExtractor {
             return second;
         }
     }
+    
     
     private final SQLCoreUtils utils = getExtractor(SQLCoreUtils.class);
     private PreparedStatement getDisjointStatement;
@@ -144,10 +167,7 @@ public final class DisjointnessExtractor extends OWLExtractor {
     }
     
     
-    public boolean areDisjoint(OWLClass cls1, OWLClass cls2) throws SQLException {
-        int id1 = utils.getID(cls1);
-        int id2 = utils.getID(cls2);
-        
+    public boolean areDisjoint(int id1, int id2) throws SQLException {
         areDisjointStatement.setInt(1, id1);
         areDisjointStatement.setInt(2, id2);
         areDisjointStatement.setInt(3, id1);
@@ -159,22 +179,39 @@ public final class DisjointnessExtractor extends OWLExtractor {
     }
     
     
-    public ArrayList<OWLClassPair> getDisjointSuperclasses(OWLClass cls1, OWLClass cls2) throws SQLException {
-        int id1 = utils.getID(cls1);
-        int id2 = utils.getID(cls2);
-        
+    public boolean areDisjoint(OWLClass cls1, OWLClass cls2) throws SQLException {
+        return areDisjoint(utils.getID(cls1), utils.getID(cls2));
+    }
+    
+    
+    public ArrayList<IntPair> getDisjointSuperclasses(int id1, int id2) throws SQLException {
         getDisjointStatement.setInt(1, id1);
         getDisjointStatement.setInt(2, id2);
         getDisjointStatement.setInt(3, id1);
         getDisjointStatement.setInt(4, id2);
         
-        ArrayList<OWLClassPair> result = new ArrayList<>();
+        ArrayList<IntPair> result = new ArrayList<>();
         try (ResultSet resultSet = getDisjointStatement.executeQuery()) {
             while (resultSet.next()) {
-                OWLClass superclass1 = utils.getEntity(resultSet.getInt(1)).asOWLClass();
-                OWLClass superclass2 = utils.getEntity(resultSet.getInt(2)).asOWLClass();
-                result.add(new OWLClassPair(superclass1, superclass2));
+                result.add(new IntPair(resultSet.getInt(1), resultSet.getInt(2)));
             }
+        }
+        
+        return result;
+    }
+    
+    
+    public ArrayList<OWLClassPair> getDisjointSuperclasses(OWLClass cls1, OWLClass cls2) throws SQLException {
+        int id1 = utils.getID(cls1);
+        int id2 = utils.getID(cls2);
+
+        ArrayList<IntPair> resultWithInts = getDisjointSuperclasses(id1, id2);
+        ArrayList<OWLClassPair> result = new ArrayList<>();
+        
+        for (IntPair intPair : resultWithInts) {
+            OWLClass superclass1 = utils.getEntity(intPair.getFirst()).asOWLClass();
+            OWLClass superclass2 = utils.getEntity(intPair.getSecond()).asOWLClass();
+            result.add(new OWLClassPair(superclass1, superclass2));
         }
         
         return result;

@@ -58,7 +58,12 @@ public final class ExtrinsicICExtractor extends OWLExtractor {
     
     
     public double getIC(OWLClass cls) throws SQLException {
-        getICStatement.setInt(1, utils.getID(cls));
+        return getIC(utils.getID(cls));
+    }
+    
+    
+    public double getIC(int id) throws SQLException {
+        getICStatement.setInt(1, id);
         try (ResultSet resultsSet = getICStatement.executeQuery()) {
             return resultsSet.getDouble(1);
         }
