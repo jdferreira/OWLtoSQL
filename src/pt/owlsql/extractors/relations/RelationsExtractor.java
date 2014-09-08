@@ -1,6 +1,5 @@
 package pt.owlsql.extractors.relations;
 
-import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -14,89 +13,117 @@ import org.semanticweb.owlapi.model.OWLClassExpression;
 import org.semanticweb.owlapi.model.OWLObjectProperty;
 import org.semanticweb.owlapi.model.OWLOntology;
 
-import pt.owlsql.OWLExtractor;
+import pt.owlsql.Config;
+import pt.owlsql.DependencyException;
+import pt.owlsql.Extractor;
 import pt.owlsql.extractors.SQLCoreUtils;
 
 
-public final class RelationsExtractor extends OWLExtractor {
+public final class RelationsExtractor extends Extractor {
     
-    private final SQLCoreUtils utils = getExtractor(SQLCoreUtils.class);
-    private PreparedStatement getRelationsStatement;
+    private SQLCoreUtils utils;
     
     
-    @SuppressWarnings("resource")
     @Override
-    protected void extract(Set<OWLOntology> ontologies) throws SQLException {
-        Connection connection = getConnection();
-        
-        Statement statement = connection.createStatement();
-        statement.execute("DROP TABLE IF EXISTS relations");
-        statement.execute("CREATE TABLE relations ("
-                + "start INT,"
-                + "chain TEXT,"
-                + "end INT,"
-                + "INDEX (chain(256)))");
-        statement.close();
-        
-        PreparedStatement insertStatement = connection.prepareStatement(""
-                + "INSERT INTO relations (start, chain, end) "
-                + "VALUES (?, ?, ?)");
-        
-        System.out.println("Finding the direct relations between pairs of concepts");
-        
-        // Start by getting a reference to all the classes
-        HashSet<OWLClass> allClasses = utils.getAllEntities(EntityType.CLASS);
-        
-        // And an Unfolder object
-        Unfolder unfolder = new Unfolder();
-        
-        int counter = 0;
-        for (OWLClass owlClass : allClasses) {
-            Set<OWLClassExpression> superclasses = owlClass.getSuperClasses(ontologies);
-            superclasses.addAll(owlClass.getEquivalentClasses(ontologies));
-            
-            RelationsStore allRelations = new RelationsStore();
-            for (OWLClassExpression superclass : superclasses) {
-                if (superclass.isAnonymous())
-                    allRelations.addAll(superclass.accept(unfolder));
-            }
-            
-            int id = utils.getID(owlClass);
-            insertStatement.setInt(1, id);
-            for (Chain chain : allRelations) {
-                if (chain.propertiesLength() == 0)
-                    continue;
-                
-                OWLObjectProperty[] properties = chain.getChain();
-                StringBuilder sb = new StringBuilder();
-                for (int i = 0; i < properties.length; i++) {
-                    if (i > 0)
-                        sb.append(",");
-                    sb.append(utils.getID(properties[i]));
-                }
-                insertStatement.setString(2, sb.toString());
-                
-                int endID = utils.getID(chain.getEndPoint());
-                insertStatement.setInt(3, endID);
-                insertStatement.addBatch();
-            }
-            
-            counter++;
-            if (counter % 1000 == 0) {
-                System.out.println("... relations for " + counter + " classes found ...");
-                insertStatement.executeBatch();
-            }
-        }
-        
-        insertStatement.executeBatch();
-        insertStatement.close();
+    public Extractor[] getDirectDependencies() throws DependencyException {
+        utils = getDependency(SQLCoreUtils.class);
+        return new Extractor[] { utils };
     }
     
     
-    public RelationsStore getRelations(OWLClass cls) throws SQLException {
+    @Override
+    public void prepareForFirstUse() throws SQLException {
+        try (Statement statement = getConnection().createStatement()) {
+            statement.executeUpdate(""
+                    + "CREATE TABLE relations ("
+                    + "  start INT, "
+                    + "  chain TEXT, "
+                    + "  end INT, "
+                    + "  INDEX (start), "
+                    + "  INDEX (chain(256)), "
+                    + "  INDEX (end), "
+                    + ")");
+        }
+    }
+    
+    
+    @Override
+    public void removeFromDatabase() throws SQLException {
+        try (Statement statement = getConnection().createStatement()) {
+            statement.execute("DROP TABLE relations");
+        }
+    }
+    
+    
+    @Override
+    public void update() throws SQLException {
+        try (PreparedStatement insertStatement = getConnection().prepareStatement("" //
+                + "INSERT INTO relations (start, chain, end) "
+                + "VALUES (?, ?, ?)")) {
+            
+            getLogger().info("Finding the direct relations between pairs of concepts");
+            
+            // Start by getting a reference to all the classes and create an Unfolder object
+            HashSet<OWLClass> allClasses = utils.getAllEntities(EntityType.CLASS);
+            Unfolder unfolder = new Unfolder();
+            
+            HashSet<OWLOntology> ontologies = Config.getOntologies();
+            
+            int counter = 0;
+            for (OWLClass owlClass : allClasses) {
+                Set<OWLClassExpression> superclasses = owlClass.getSuperClasses(ontologies);
+                superclasses.addAll(owlClass.getEquivalentClasses(ontologies));
+                
+                RelationsStore allRelations = new RelationsStore();
+                for (OWLClassExpression superclass : superclasses) {
+                    if (superclass.isAnonymous())
+                        allRelations.addAll(superclass.accept(unfolder));
+                }
+                
+                int id = utils.getID(owlClass);
+                insertStatement.setInt(1, id);
+                for (Chain chain : allRelations) {
+                    if (chain.propertiesLength() == 0)
+                        continue;
+                    
+                    OWLObjectProperty[] properties = chain.getChain();
+                    StringBuilder sb = new StringBuilder();
+                    for (int i = 0; i < properties.length; i++) {
+                        if (i > 0)
+                            sb.append(",");
+                        sb.append(properties[i]);
+                    }
+                    insertStatement.setString(2, sb.toString());
+                    insertStatement.setInt(3, utils.getID(chain.getEndPoint()));
+                    insertStatement.addBatch();
+                }
+                
+                counter++;
+                if (counter % 1000 == 0) {
+                    getLogger().info("... relations for " + counter + " classes found ...");
+                    insertStatement.executeBatch();
+                }
+            }
+            
+            getLogger().info("... relations for " + counter + " classes found ...");
+            insertStatement.executeBatch();
+        }
+    }
+    
+    
+    private PreparedStatement getRelationsStatement;
+    
+    
+    @Override
+    public void prepareForDependents() throws SQLException {
+        getRelationsStatement = getConnection().prepareStatement("SELECT chain, end FROM relations WHERE start = ?");
+    }
+    
+    
+    public RelationsStore getRelations(int id) throws SQLException {
         RelationsStore result = new RelationsStore();
         
-        getRelationsStatement.setInt(1, utils.getID(cls));
+        getRelationsStatement.setInt(1, id);
         try (ResultSet resultSet = getRelationsStatement.executeQuery()) {
             while (resultSet.next()) {
                 String chainString = resultSet.getString(1);
@@ -107,8 +134,8 @@ public final class RelationsExtractor extends OWLExtractor {
                 for (int i = 0; i < properties.length; i++) {
                     properties[i] = utils.getEntity(Integer.parseInt(fields[i])).asOWLObjectProperty();
                 }
-                OWLClass endPoint = utils.getEntity(endID).asOWLClass();
                 
+                OWLClass endPoint = utils.getEntity(endID).asOWLClass();
                 result.add(new Chain(properties, endPoint));
             }
         }
@@ -117,9 +144,28 @@ public final class RelationsExtractor extends OWLExtractor {
     }
     
     
-    @Override
-    public void prepare() throws SQLException {
-        Connection connection = getConnection();
-        getRelationsStatement = connection.prepareStatement("SELECT chain, end FROM relations WHERE start = ?");
+    public int[][] getInternalRelations(int id) throws SQLException {
+        int[][] result;
+        
+        getRelationsStatement.setInt(1, id);
+        try (ResultSet resultSet = getRelationsStatement.executeQuery()) {
+            int amount = SQLCoreUtils.countRows(resultSet);
+            result = new int[amount][];
+            int row = 0;
+            while (resultSet.next()) {
+                String chainString = resultSet.getString(1);
+                int endID = resultSet.getInt(2);
+                
+                String[] fields = chainString.split(",");
+                int[] instances = new int[fields.length + 1];
+                for (int i = 0; i < fields.length; i++) {
+                    instances[i] = Integer.parseInt(fields[i]);
+                }
+                instances[instances.length - 1] = endID;
+                result[row++] = instances;
+            }
+        }
+        
+        return result;
     }
 }

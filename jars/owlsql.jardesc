@@ -11,6 +11,7 @@
         </sealing>
     </manifest>
     <selectedElements exportClassFiles="true" exportJavaFiles="false" exportOutputFolder="false">
+        <javaElement handleIdentifier="=OWLtoSQL/new"/>
         <javaElement handleIdentifier="=OWLtoSQL/src"/>
     </selectedElements>
 </jardesc>

@@ -13,5 +13,6 @@
 		</attributes>
 	</classpathentry>
 	<classpathentry kind="lib" path="lib/mysql/mysql-connector-java-5.1.31-bin.jar" sourcepath="lib/mysql/mysql-connector-java-5.1.31-bin.jar"/>
+	<classpathentry kind="lib" path="lib/diffutils/diffutils-1.2.1.jar" sourcepath="lib/diffutils/diffutils-1.2.1-sources.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>

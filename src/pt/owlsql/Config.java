@@ -1,20 +1,26 @@
-package pt.owlsql.config;
+package pt.owlsql;
 
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.lang.reflect.Modifier;
 import java.net.URI;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Hashtable;
 import java.util.List;
 import java.util.Map.Entry;
 
+import org.semanticweb.owlapi.apibinding.OWLManager;
+import org.semanticweb.owlapi.model.IRI;
+import org.semanticweb.owlapi.model.OWLOntology;
+import org.semanticweb.owlapi.model.OWLOntologyCreationException;
+import org.semanticweb.owlapi.model.OWLOntologyManager;
+
 import pt.json.JSONException;
-import pt.owlsql.Cacher;
-import pt.owlsql.Extractor;
-import pt.owlsql.OWLExtractor;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -22,14 +28,14 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
 
-public final class JSONConfig {
+public final class Config {
     
     private static class Resolution {
         
-        private final ArrayList<String> parts;
-        private final ArrayList<String> variableNames;
-        
         private HashSet<String> dependencies;
+        private final ArrayList<String> parts;
+        
+        private final ArrayList<String> variableNames;
         
         
         private Resolution(ArrayList<String> parts, ArrayList<String> variableNames) {
@@ -68,20 +74,30 @@ public final class JSONConfig {
     
     private static JsonObject doc;
     
-    private static String host;
+    private static final Hashtable<String, String> variables = new Hashtable<>();
+    private static final ArrayList<URI> ontologiesURI = new ArrayList<>();
+    private static HashSet<OWLOntology> ontologies;
+    
+    private static String hostname;
     private static String database;
-    private static String password;
     private static String username;
+    private static String password;
     
     private static final ArrayList<ExtractorSpec<?>> extractorSpecs = new ArrayList<>();
     
-    private static final ArrayList<URI> ontologies = new ArrayList<>();
-    private static final Hashtable<String, String> variables = new Hashtable<>();
+    
+    static {
+        try {
+            Class.forName("com.mysql.jdbc.Driver");
+        }
+        catch (ClassNotFoundException e) {
+            throw new Error(e);
+        }
+    }
     
     
-    private static void detectCycles() throws JSONException {
-        // We now need to make sure that no cycles exist and then replace the value of each variable with its resolved
-        // value
+    private static void detectVariableCycles() throws JSONException {
+        // We need to make sure that cycles do not exist.
         Hashtable<String, HashSet<String>> dependsOn = new Hashtable<>();
         Hashtable<String, HashSet<String>> isDependencyOf = new Hashtable<>();
         
@@ -112,8 +128,9 @@ public final class JSONConfig {
             }
         }
         
-        // While there are variables with no dependencies, remove them
+        // We now go through each variable name
         while (dependsOn.size() > 0) {
+            // Find a variable that has no dependencies. Failure to do so means that there is a cycle
             String noDependencies = null;
             for (Entry<String, HashSet<String>> entry : dependsOn.entrySet()) {
                 if (entry.getValue().size() == 0) {
@@ -121,6 +138,7 @@ public final class JSONConfig {
                     break;
                 }
             }
+            
             if (noDependencies != null) {
                 // This variable does not have any dependencies (or all of them can be resolved)
                 // so it can also be resolved. Thus, it is the next one to be resolved
@@ -135,21 +153,45 @@ public final class JSONConfig {
             }
             
             // If we're here, then there is at least one cycle.
-            // Find one and report it
+            // Furthermore, all the variables remaining are part of some cycle.
+            // Find one and report it, just to be cute!
             
             List<String> cycle = new ArrayList<>();
-            String varName = dependsOn.keySet().iterator().next();
+            String varName = dependsOn.keySet().iterator().next(); // Get one of the remaining variable names (any one)
             int index = -1;
             while ((index = cycle.indexOf(varName)) == -1) {
                 cycle.add(varName);
-                varName = dependsOn.get(varName).iterator().next();
+                varName = dependsOn.get(varName).iterator().next(); // Get any of the current variable's dependencies
             }
-            cycle = cycle.subList(index, cycle.size());
+            cycle = cycle.subList(index, cycle.size()); // The actual cycle is between the first and last occurrences of
+                                                        // the variable; this removes extra prefix variables
             StringBuilder sb = new StringBuilder();
             for (String string : cycle) {
                 sb.append(" > ").append(string);
             }
             throw new JSONException("Cyclic variable dependency detected: " + sb.substring(3), "variables");
+        }
+    }
+    
+    
+    static String extractString(JsonObject object, String key, boolean mandatory) throws JSONException {
+        JsonElement element = object.get(key);
+        if (element == null) {
+            if (mandatory)
+                throw new JSONException("must have a \"" + key + "\" element");
+            else
+                return null;
+        }
+        else if (!element.isJsonPrimitive() || !element.getAsJsonPrimitive().isString())
+            throw new JSONException("must be a string", key);
+        else {
+            try {
+                Resolution resolution = getResolution(element.getAsString());
+                return resolution.resolve();
+            }
+            catch (JSONException e) {
+                throw e.withPrefix(key);
+            }
         }
     }
     
@@ -184,7 +226,7 @@ public final class JSONConfig {
             variableNames.add(null);
             
             // So, this dollar-sign must be followed by { and then a valid variable name and then }
-            if (string.charAt(dollarIndex + 1) != '{')
+            if (dollarIndex == string.length() - 1 || string.charAt(dollarIndex + 1) != '{')
                 throw new JSONException("Expecting '{' after the dollar sign");
             int endName = string.indexOf('}', dollarIndex + 2);
             if (endName == -1)
@@ -234,16 +276,10 @@ public final class JSONConfig {
     
     
     private static ExtractorSpec<?> processExtractor(JsonObject object) throws JSONException {
-        if (!object.has("class"))
-            throw new JSONException("must have a \"class\" element");
-        
-        JsonElement classElement = object.remove("class");
-        if (!classElement.isJsonPrimitive() || !classElement.getAsJsonPrimitive().isString())
-            throw new JSONException("must be a string", "class");
-        
+        String classname = extractString(object, "class", true);
         Class<? extends Extractor> extractorClass;
         try {
-            extractorClass = getExtractorClass(classElement.getAsString());
+            extractorClass = getExtractorClass(classname);
         }
         catch (JSONException e) {
             throw e.withPrefix("class");
@@ -269,33 +305,23 @@ public final class JSONConfig {
             return;
         else if (!element.isJsonArray())
             throw new JSONException("must be a JSON array", "extractors");
-        JsonArray array = element.getAsJsonArray();
+        JsonArray extractorsArray = element.getAsJsonArray();
         
-        for (int i = 0; i < array.size(); i++) {
-            JsonElement inner = array.get(i);
+        HashSet<Class<?>> seenClasses = new HashSet<>();
+        
+        for (int i = 0; i < extractorsArray.size(); i++) {
             ExtractorSpec<?> spec;
-            if (inner.isJsonPrimitive() && inner.getAsJsonPrimitive().isString()) {
-                try {
-                    spec = processExtractor(resolve(inner.getAsString()));
-                }
-                catch (JSONException e) {
-                    throw e.withPrefix("extractors", "[" + i + "]");
-                }
+            try {
+                spec = createExtractorSpecFromJSON(extractorsArray.get(i));
             }
-            else if (inner.isJsonObject()) {
-                try {
-                    spec = processExtractor(inner.getAsJsonObject());
-                }
-                catch (JSONException e) {
-                    throw e.withPrefix("extractors", "[" + i + "]");
-                }
+            catch (JSONException e) {
+                throw e.withPrefix("extractors", "[" + i + "]");
             }
-            else
-                throw new JSONException("must be either a string or a JSON object", "extractors", "[" + i + "]");
+            if (seenClasses.contains(spec.getClass()))
+                throw new JSONException("Extractor classes must be unique", "extractors", "[" + i + "]");
             
             extractorSpecs.add(spec);
         }
-        
     }
     
     
@@ -310,11 +336,11 @@ public final class JSONConfig {
         for (int i = 0; i < array.size(); i++) {
             JsonElement inner = array.get(i);
             if (!inner.isJsonPrimitive() || !inner.getAsJsonPrimitive().isString())
-                throw new JSONException("must be a JSON array", "ontologies", "[" + i + "]");
+                throw new JSONException("must be a string", "ontologies", "[" + i + "]");
             
-            URI url;
+            URI uri;
             try {
-                url = URI.create(resolve(inner.getAsString()));
+                uri = URI.create(resolve(inner.getAsString())).normalize();
             }
             catch (IllegalArgumentException e) {
                 throw new JSONException("Malformed URL", e, "ontologies", "[" + i + "]");
@@ -323,7 +349,10 @@ public final class JSONConfig {
                 throw e.withPrefix("ontologies", "[" + i + "]");
             }
             
-            ontologies.add(url);
+            if (ontologiesURI.contains(uri))
+                throw new JSONException("Duplicate ontology uri " + uri, "ontologies", "[" + i + "]");
+            
+            ontologiesURI.add(uri);
         }
     }
     
@@ -334,63 +363,22 @@ public final class JSONConfig {
             throw new JSONException("object \"mysql\" is mandatory");
         else if (!element.isJsonObject())
             throw new JSONException("must be a JSON object", "mysql");
-        JsonObject object = element.getAsJsonObject();
+        JsonObject mysqlObject = element.getAsJsonObject();
         
-        JsonElement databaseElement = object.get("database");
-        if (databaseElement == null)
-            throw new JSONException("must have a \"database\" value", "mysql");
-        else if (!databaseElement.isJsonPrimitive() || !databaseElement.getAsJsonPrimitive().isString())
-            throw new JSONException("must be a string", "mysql", "database");
-        else {
-            try {
-                database = resolve(databaseElement.getAsString());
-            }
-            catch (JSONException e) {
-                throw e.withPrefix("mysql", "database");
-            }
+        
+        try {
+            database = extractString(mysqlObject, "database", true);
+            username = extractString(mysqlObject, "username", true);
+            password = extractString(mysqlObject, "password", true);
+            hostname = extractString(mysqlObject, "hostname", false);
+        }
+        catch (JSONException e) {
+            throw e.withPrefix("mysql");
         }
         
-        JsonElement usernameElement = object.get("username");
-        if (usernameElement == null)
-            throw new JSONException("must have a \"username\" value", "mysql");
-        else if (!usernameElement.isJsonPrimitive() || !usernameElement.getAsJsonPrimitive().isString())
-            throw new JSONException("must be a string", "mysql", "username");
-        else {
-            try {
-                username = resolve(usernameElement.getAsString());
-            }
-            catch (JSONException e) {
-                throw e.withPrefix("mysql", "username");
-            }
-        }
-        
-        JsonElement passwordElement = object.get("password");
-        if (passwordElement == null)
-            throw new JSONException("must have a \"password\" value", "mysql");
-        else if (!passwordElement.isJsonPrimitive() || !passwordElement.getAsJsonPrimitive().isString())
-            throw new JSONException("must be a string", "mysql", "password");
-        else {
-            try {
-                password = resolve(passwordElement.getAsString());
-            }
-            catch (JSONException e) {
-                throw e.withPrefix("mysql", "password");
-            }
-        }
-        
-        JsonElement hostElement = object.get("host");
-        if (hostElement == null)
-            host = "localhost";
-        else if (!hostElement.isJsonPrimitive() || !hostElement.getAsJsonPrimitive().isString())
-            throw new JSONException("must be a string", "mysql", "host");
-        else {
-            try {
-                host = resolve(hostElement.getAsString());
-            }
-            catch (JSONException e) {
-                throw e.withPrefix("mysql", "host");
-            }
-        }
+        // The host can be null, in which case we will use the localhost
+        if (hostname == null)
+            hostname = "localhost";
     }
     
     
@@ -409,7 +397,7 @@ public final class JSONConfig {
             variables.put(entry.getKey(), value.getAsString());
         }
         
-        detectCycles();
+        detectVariableCycles();
     }
     
     
@@ -421,16 +409,15 @@ public final class JSONConfig {
     }
     
     
+    private static String resolve(String string) throws JSONException {
+        return getResolution(string).resolve();
+    }
+    
+    
     private static void validateClass(Class<?> cls) throws JSONException {
         // There are a few restrictions on the classes that are valid Executables implementations
-        if (cls.equals(Extractor.class)
-                || cls.equals(OWLExtractor.class)
-                || cls.equals(Cacher.class)
-                || (!OWLExtractor.class.isAssignableFrom(cls) && Cacher.class.isAssignableFrom(cls)))
-            throw new JSONException("must extend either "
-                    + OWLExtractor.class.getName()
-                    + " or "
-                    + Cacher.class.getName());
+        if (cls.equals(Extractor.class) || (!Extractor.class.isAssignableFrom(cls)))
+            throw new JSONException("must extend " + Extractor.class.getName());
         
         if (cls.isAnonymousClass())
             throw new JSONException("must not be an anonymous class");
@@ -450,59 +437,120 @@ public final class JSONConfig {
     }
     
     
-    public static String getDatabase() {
+    static Connection connectToDatabase() throws SQLException {
+        // This will load the MySQL driver
+        String uri = "jdbc:mysql://" + hostname + "/" + database + "?user=" + username + "&password=" + password;
+        return DriverManager.getConnection(uri);
+    }
+    
+    
+    static Connection connectToSQLServer() throws SQLException {
+        // This will load the MySQL driver
+        String uri = "jdbc:mysql://" + hostname + "/?user=" + username + "&password=" + password;
+        return DriverManager.getConnection(uri);
+    }
+    
+    
+    /**
+     * This method takes a JSON element and tries to make an {@link ExtractorSpec} from it.
+     * 
+     * @param element
+     * @return
+     * @throws JSONException
+     */
+    static ExtractorSpec<?> createExtractorSpecFromJSON(JsonElement element) throws JSONException {
+        ExtractorSpec<?> spec;
+        if (element.isJsonPrimitive() && element.getAsJsonPrimitive().isString()) {
+            spec = processExtractor(resolve(element.getAsString()));
+        }
+        else if (element.isJsonObject()) {
+            spec = processExtractor(element.getAsJsonObject());
+        }
+        else
+            throw new JSONException("must be either a string or a JSON object");
+        
+        return spec;
+    }
+    
+    
+    static String getDatabase() {
         return database;
     }
     
     
-    public static ArrayList<ExtractorSpec<?>> getExtractorSpecs() {
+    static ArrayList<ExtractorSpec<?>> getExtractorSpecs() {
         return extractorSpecs;
     }
     
     
-    public static String getHost() {
-        return host;
+    static String getHostname() {
+        return hostname;
     }
     
     
-    public static ArrayList<URI> getOntologiesURI() {
-        return new ArrayList<>(ontologies);
+    static HashSet<URI> getOntologiesURI() {
+        return new HashSet<>(ontologiesURI);
     }
     
     
-    public static String getPassword() {
+    public static HashSet<OWLOntology> getOntologies() {
+        return new HashSet<>(ontologies);
+    }
+    
+    
+    static String getPassword() {
         return password;
     }
     
     
-    public static String getUsername() {
+    static String getUsername() {
         return username;
     }
     
     
-    public static void main(String[] args) throws IOException, JSONException {
-        JSONConfig.read(CONFIG_FILE);
+    /**
+     * This method loads the ontologies specified in the configuration file. Notice that laoding only happens on demand,
+     * rather than when the ontology is specified with the JSON "ontologies" element.
+     * 
+     * @return the set of loaded ontologies
+     * 
+     * @throws OwlSqlException If an anonymous opnotlogy is present in the list of ontologies; those are not supported
+     *             by OWLtoSQL.
+     * @throws OWLOntologyCreationException If there was a problem in creating and loading the ontology. See
+     *             documentation for {@link OWLOntologyManager#loadOntologyFromOntologyDocument(IRI)}.
+     */
+    static HashSet<OWLOntology> loadOntologies() throws OwlSqlException, OWLOntologyCreationException {
+        OWLOntologyManager manager = OWLManager.createOWLOntologyManager();
+        
+        System.out.println("Loading ontologies ...");
+        ontologies = new HashSet<>();
+        for (URI uri : ontologiesURI) {
+            IRI iri = IRI.create(uri);
+            System.out.println("  " + uri);
+            OWLOntology ontology = manager.loadOntology(iri);
+            if (ontology.isAnonymous())
+                throw new OwlSqlException("Anonymous ontologies are not compatible with OWLtoSQL.");
+            
+            ontologies.add(ontology);
+        }
+        
+        return ontologies;
     }
     
     
-    public static void read(String filename) throws IOException, JSONException {
+    static void read(String filename) throws IOException, JSONException {
         try (FileInputStream stream = new FileInputStream(filename)) {
             JsonParser parser = new JsonParser();
             try (InputStreamReader reader = new InputStreamReader(stream)) {
                 doc = parser.parse(reader).getAsJsonObject();
             }
-            
-            readDocument();
         }
+        
+        readDocument();
     }
     
     
-    public static String resolve(String string) throws JSONException {
-        return getResolution(string).resolve();
-    }
-    
-    
-    private JSONConfig() {
+    private Config() {
         throw new RuntimeException("Cannot instantiate this class");
     }
 }

@@ -1,22 +1,55 @@
 package pt.owlsql.extractors;
 
-import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.HashSet;
-import java.util.Set;
 
-import org.semanticweb.owlapi.model.OWLClass;
-import org.semanticweb.owlapi.model.OWLOntology;
-
-import pt.owlsql.OWLExtractor;
+import pt.owlsql.DependencyException;
+import pt.owlsql.Extractor;
 
 
-public final class LeavesExtractor extends OWLExtractor {
+public final class LeavesExtractor extends Extractor {
     
-    private final SQLCoreUtils utils = getExtractor(SQLCoreUtils.class);
+    private SQLCoreUtils utils;
+    
+    
+    @Override
+    public Extractor[] getDirectDependencies() throws DependencyException {
+        utils = getDependency(SQLCoreUtils.class);
+        return new Extractor[] { utils };
+    }
+    
+    
+    @Override
+    public void prepareForFirstUse() throws SQLException {
+        try (Statement statement = getConnection().createStatement()) {
+            statement.executeUpdate("CREATE TABLE leaves (id INT PRIMARY KEY NOT NULL, UNIQUE (id))");
+        }
+    }
+    
+    
+    @Override
+    public void removeFromDatabase() throws SQLException {
+        try (Statement statement = getConnection().createStatement()) {
+            statement.executeUpdate("DROP TABLE leaves");
+        }
+    }
+    
+    
+    @Override
+    public void update() throws SQLException {
+        try (Statement statement = getConnection().createStatement()) {
+            statement.executeUpdate(""
+                    + "INSERT INTO leaves (id) "
+                    + "SELECT superclass "
+                    + "FROM hierarchy "
+                    + "GROUP BY superclass "
+                    + "HAVING COUNT(*) = 1");
+        }
+        
+    }
+    
     
     private PreparedStatement isLeafStatement;
     private PreparedStatement getLeaves;
@@ -25,57 +58,32 @@ public final class LeavesExtractor extends OWLExtractor {
     
     
     @Override
-    protected void extract(Set<OWLOntology> ontologies) throws SQLException {
-        @SuppressWarnings("resource")
-        final Statement statement = getConnection().createStatement();
-        
-        // Create the table that contains the IRI's of OWLEntities
-        statement.execute("DROP TABLE IF EXISTS leaves");
-        statement.execute("CREATE TABLE leaves (id INT, UNIQUE (id))");
-        
-        statement.execute(""
-                + "INSERT INTO leaves (id) "
-                + "SELECT superclass "
-                + "FROM hierarchy "
-                + "GROUP BY superclass "
-                + "HAVING COUNT(*) = 1");
-        
-        statement.close();
-    }
-    
-    
-    @Override
-    protected void prepare() throws SQLException {
-        final Connection connection = getConnection();
-        
-        isLeafStatement = connection.prepareStatement("SELECT COUNT(*) FROM leaves WHERE id = ?");
-        getLeaves = connection.prepareStatement(""
+    public void prepareForDependents() throws SQLException {
+        isLeafStatement = getConnection().prepareStatement("SELECT id FROM leaves WHERE id = ?");
+        getLeaves = getConnection().prepareStatement(""
                 + "SELECT subclass "
                 + "FROM hierarchy "
                 + "JOIN leaves ON leaves.id = subclass "
                 + "WHERE superclass = ?");
-        getLeavesSize = connection.prepareStatement(""
+        getLeavesSize = getConnection().prepareStatement(""
                 + "SELECT COUNT(*) "
                 + "FROM hierarchy "
                 + "JOIN leaves ON leaves.id = subclass "
                 + "WHERE superclass = ?");
-        getNumberOfLeaves = connection.prepareStatement("SELECT COUNT(*) FROM leaves");
+        getNumberOfLeaves = getConnection().prepareStatement("SELECT COUNT(*) FROM leaves");
     }
     
     
-    public HashSet<OWLClass> getLeafDescendants(int id) throws SQLException {
+    public int[] getLeafDescendants(int id) throws SQLException {
         getLeaves.setInt(1, id);
-        final HashSet<OWLClass> result = new HashSet<>();
         try (ResultSet resultSet = getLeaves.executeQuery()) {
-            while (resultSet.next())
-                result.add((OWLClass) utils.getEntity(resultSet.getInt(1)));
+            int[] result = new int[SQLCoreUtils.countRows(resultSet)];
+            int i = 0;
+            while (resultSet.next()) {
+                result[i++] = resultSet.getInt(1);
+            }
+            return result;
         }
-        return result;
-    }
-    
-    
-    public HashSet<OWLClass> getLeafDescendants(OWLClass owlClass) throws SQLException {
-        return getLeafDescendants(utils.getID(owlClass));
     }
     
     
@@ -85,11 +93,6 @@ public final class LeavesExtractor extends OWLExtractor {
             resultSet.next();
             return resultSet.getInt(1);
         }
-    }
-    
-    
-    public int getLeafDescendantsSize(OWLClass owlClass) throws SQLException {
-        return getLeafDescendantsSize(utils.getID(owlClass));
     }
     
     
@@ -104,14 +107,8 @@ public final class LeavesExtractor extends OWLExtractor {
     public boolean isLeaf(int id) throws SQLException {
         isLeafStatement.setInt(1, id);
         try (ResultSet resultSet = isLeafStatement.executeQuery()) {
-            resultSet.next();
-            return resultSet.getInt(1) == 0;
+            return resultSet.next();
         }
     }
     
-    
-    // TODO All methods that take OWLClass should also take int
-    public boolean isLeaf(OWLClass owlClass) throws SQLException {
-        return isLeaf(utils.getID(owlClass));
-    }
 }

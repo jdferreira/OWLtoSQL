@@ -1,64 +1,73 @@
 package pt.owlsql.extractors;
 
-import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.Set;
 
-import org.semanticweb.owlapi.model.OWLClass;
-import org.semanticweb.owlapi.model.OWLOntology;
-
-import pt.owlsql.OWLExtractor;
+import pt.owlsql.DependencyException;
+import pt.owlsql.Extractor;
 
 
-public final class ExtrinsicICExtractor extends OWLExtractor {
+public final class ExtrinsicICExtractor extends Extractor {
     
-    private final SQLCoreUtils utils = getExtractor(SQLCoreUtils.class);
-    
-    private PreparedStatement getICStatement;
+    private SQLCoreUtils utils;
     
     
-    @SuppressWarnings("resource")
     @Override
-    protected void extract(Set<OWLOntology> ontologies) throws SQLException {
-        Connection connection = getConnection();
-        
+    public Extractor[] getDirectDependencies() throws DependencyException {
+        utils = getDependency(SQLCoreUtils.class);
+        return new Extractor[] { utils, getDependency(AnnotationExtractor.class) };
+    }
+    
+    
+    @Override
+    public void prepareForFirstUse() throws SQLException {
+        try (Statement statement = getConnection().createStatement()) {
+            statement.executeUpdate("CREATE TABLE extrinsic_ic (id INT PRIMARY KEY NOT NULL, ic DOUBLE NOT NULL)");
+        }
+    }
+    
+    
+    @Override
+    public void update() throws SQLException {
+        // Get the number of all annotated entities
         int nModels;
-        try (Statement statement = connection.createStatement()) {
-            statement.execute("DROP TABLE IF EXISTS extrinsic_ic");
-            statement.execute("CREATE TABLE extrinsic_ic (class INT PRIMARY KEY, ic DOUBLE)");
-            
-            // Get the number of all annotated entities
-            try (ResultSet resultSet = statement.executeQuery("SELECT COUNT(DISTINCT entity) FROM annotations")) {
-                resultSet.next();
-                nModels = resultSet.getInt(1);
-            }
+        try (Statement statement = getConnection().createStatement();
+             ResultSet resultSet = statement.executeQuery("SELECT COUNT(DISTINCT entity) FROM annotations")) {
+            resultSet.next();
+            nModels = resultSet.getInt(1);
         }
         
-        System.out.println("Computing the extrinsic IC values for all concepts");
+        getLogger().info("Computing the extrinsic IC values for all concepts");
         
-        PreparedStatement insertStatement = connection.prepareStatement(""
+        try (PreparedStatement insertStatement = getConnection().prepareStatement(""
                 + "INSERT INTO extrinsic_ic (class, ic) "
                 + "SELECT superclass, 1 - LOG(COUNT(DISTINCT entity)) / LOG(?)"
                 + "FROM annotations "
                 + "JOIN hierarchy ON hierarchy.subclass = annotations.annotation "
-                + "GROUP BY superclass");
-        insertStatement.setInt(1, nModels);
-        insertStatement.executeUpdate();
-        insertStatement.close();
+                + "GROUP BY superclass")) {
+            insertStatement.setInt(1, nModels);
+            insertStatement.executeUpdate();
+            insertStatement.close();
+        }
     }
     
     
     @Override
-    protected void prepare() throws SQLException {
-        getICStatement = getConnection().prepareStatement("SELECT ic FROM extrinsic_ic WHERE class = ?");
+    public void removeFromDatabase() throws SQLException {
+        try (Statement statement = getConnection().createStatement()) {
+            statement.execute("DROP TABLE extrinsic_ic");
+        }
     }
     
     
-    public double getIC(OWLClass cls) throws SQLException {
-        return getIC(utils.getID(cls));
+    private PreparedStatement getICStatement;
+    
+    
+    @Override
+    public void prepareForDependents() throws SQLException {
+        getICStatement = getConnection().prepareStatement("SELECT ic FROM extrinsic_ic WHERE class = ?");
     }
     
     

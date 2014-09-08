@@ -1,131 +1,38 @@
 package pt.owlsql.extractors;
 
-import java.sql.Connection;
 import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.HashSet;
-import java.util.Set;
 
 import org.semanticweb.owlapi.model.EntityType;
-import org.semanticweb.owlapi.model.OWLClass;
-import org.semanticweb.owlapi.model.OWLOntology;
 
 import pt.json.JSONException;
-import pt.owlsql.OWLExtractor;
+import pt.owlsql.DependencyException;
+import pt.owlsql.Extractor;
 
 import com.google.gson.JsonElement;
 
 
-public final class IntrinsicICExtractor extends OWLExtractor {
+public final class IntrinsicICExtractor extends Extractor {
     
-    private final SQLCoreUtils utils = getExtractor(SQLCoreUtils.class);
-    private final HierarchyExtractor ancestry = getExtractor(HierarchyExtractor.class);
-    private final LeavesExtractor leaves = getExtractor(LeavesExtractor.class);
+    private SQLCoreUtils utils;
+    private HierarchyExtractor hierarchy;
+    private LeavesExtractor leaves;
     
     private double zhouK;
     private double secoIC;
     private double zhouIC;
     private double sanchezIC;
     private double leavesIC;
-    private int maxDepth;
     private double log_tC;
     private double log_tL;
     private double log_mD1;
-    
-    private PreparedStatement getICStatement;
-    
-    
-    private void calculate(OWLClass owlClass) throws SQLException {
-        if (owlClass == null) {
-            secoIC = zhouIC = sanchezIC = leavesIC = 0;
-            return;
-        }
-        
-        int nDescendants = ancestry.getNumberOfSubclasses(owlClass);
-        int nAncestors = ancestry.getNumberOfSuperclasses(owlClass);
-        int nLeaves = leaves.getLeafDescendantsSize(owlClass);
-        int depth = ancestry.getDepth(owlClass);
-        
-        double log_nD = Math.log(nDescendants);
-        double log_nL = Math.log(nLeaves);
-        
-        // Formulas are correct but look different to increase calculation speed
-        // They are also normalized so that all scores are form 0 to 1
-        secoIC = 1 - log_nD / log_tC;
-        zhouIC = zhouK * secoIC + (1 - zhouK) * Math.log(depth + 1) / log_mD1;
-        sanchezIC = (log_tL + Math.log(nAncestors) - log_nL) / (log_tC + log_tL);
-        leavesIC = 1 - log_nL / log_tL;
-    }
-    
-    
-    @Override
-    protected void extract(Set<OWLOntology> ontologies) throws SQLException {
-        Connection connection = getConnection();
-        
-        try (Statement statement = connection.createStatement()) {
-            statement.execute("DROP TABLE IF EXISTS intrinsic_ic");
-            statement.execute("CREATE TABLE intrinsic_ic ("
-                    + "class INT,"
-                    + "seco DOUBLE,"
-                    + "zhou DOUBLE,"
-                    + "sanchez DOUBLE,"
-                    + "leaves DOUBLE,"
-                    + "UNIQUE (class))");
-        }
-        
-        try (PreparedStatement insertStatement = connection.prepareStatement(""
-                + "INSERT INTO intrinsic_ic (class, seco, zhou, sanchez, leaves) "
-                + "VALUES (?, ?, ?, ?, ?)")) {
-            
-            System.out.println("Finding all the intrinsic IC values (SECO, ZHOU, SANCHEZ and LEAVES)");
-            
-            // Start by getting a reference to all the classes
-            HashSet<OWLClass> allClasses = utils.getAllEntities(EntityType.CLASS);
-            log_tC = Math.log(allClasses.size());
-            log_tL = Math.log(leaves.getNumberOfLeaves());
-            
-            maxDepth = ancestry.getMaxDepth();
-            log_mD1 = Math.log(maxDepth + 1);
-            
-            int counter = 0;
-            for (OWLClass owlClass : allClasses) {
-                calculate(owlClass);
-                int id = utils.getID(owlClass);
-                insertStatement.setInt(1, id);
-                insertStatement.setDouble(2, secoIC);
-                insertStatement.setDouble(3, zhouIC);
-                insertStatement.setDouble(4, sanchezIC);
-                insertStatement.setDouble(5, leavesIC);
-                insertStatement.addBatch();
-                
-                counter++;
-                if (counter % 1000 == 0) {
-                    System.out.println("... IC for " + counter + " classes found ...");
-                    insertStatement.executeBatch();
-                }
-            }
-            
-            insertStatement.executeBatch();
-        }
-    }
+    private int maxDepth;
     
     
     @Override
     protected String[] getMandatoryOptions() {
         return new String[] { "zhou_k" };
-    }
-    
-    
-    @Override
-    protected void prepare() throws SQLException {
-        Connection connection = getConnection();
-        
-        getICStatement = connection.prepareStatement(""
-                + "SELECT seco, zhou, sanchez, leaves "
-                + "FROM intrinsic_ic "
-                + "WHERE class = ?");
     }
     
     
@@ -145,26 +52,97 @@ public final class IntrinsicICExtractor extends OWLExtractor {
     }
     
     
-    public double getIC(int id, IntrinsicICMethod method) throws SQLException {
-        getICStatement.setInt(1, id);
+    @Override
+    public Extractor[] getDirectDependencies() throws DependencyException {
+        utils = getDependency(SQLCoreUtils.class);
+        hierarchy = getDependency(HierarchyExtractor.class);
+        leaves = getDependency(LeavesExtractor.class);
         
-        try (ResultSet resultsSet = getICStatement.executeQuery()) {
-            if (resultsSet.next())
-                if (method == IntrinsicICMethod.SECO)
-                    return resultsSet.getDouble(1);
-                else if (method == IntrinsicICMethod.ZHOU)
-                    return resultsSet.getDouble(2);
-                else if (method == IntrinsicICMethod.SANCHEZ)
-                    return resultsSet.getDouble(3);
-                else if (method == IntrinsicICMethod.LEAVES)
-                    return resultsSet.getDouble(4);
-        }
-        
-        return -1;
+        return new Extractor[] { utils, hierarchy };
     }
     
     
-    public double getIC(OWLClass cls, IntrinsicICMethod method) throws SQLException {
-        return getIC(utils.getID(cls), method);
+    @Override
+    public void prepareForFirstUse() throws SQLException {
+        try (Statement statement = getConnection().createStatement()) {
+            statement.executeUpdate(""
+                    + "CREATE TABLE intrinsic_ic ("
+                    + "  id INT NOT NULL,"
+                    + "  seco DOUBLE NOT NULL,"
+                    + "  zhou DOUBLE NOT NULL,"
+                    + "  sanchez DOUBLE NOT NULL,"
+                    + "  leaves DOUBLE NOT NULL,"
+                    + "  UNIQUE (id)"
+                    + ")");
+        }
+    }
+    
+    
+    @Override
+    public void removeFromDatabase() throws SQLException {
+        try (Statement statement = getConnection().createStatement()) {
+            statement.executeUpdate("DROP TABLE intrinsic_ic");
+        }
+    }
+    
+    
+    private void calculate(int id) throws SQLException {
+        int nDescendants = hierarchy.getNumberOfSubclasses(id);
+        int nAncestors = hierarchy.getNumberOfSuperclasses(id);
+        int nLeaves = leaves.getLeafDescendantsSize(id);
+        int depth = hierarchy.getDepth(id);
+        
+        double log_nD = Math.log(nDescendants);
+        double log_nL = Math.log(nLeaves);
+        
+        // Formulas are correct but look different to increase calculation speed
+        // They are also normalized so that all scores are form 0 to 1
+        secoIC = 1 - log_nD / log_tC;
+        zhouIC = zhouK * secoIC + (1 - zhouK) * Math.log(depth + 1) / log_mD1;
+        sanchezIC = (log_tL + Math.log(nAncestors) - log_nL) / (log_tC + log_tL);
+        leavesIC = 1 - log_nL / log_tL;
+    }
+    
+    
+    @Override
+    public void update() throws SQLException {
+        // As a SingleUseExtractor, an update is equivalent to removing everything we have stored and starting from
+        // scratch. We implement this by running the two methods removeFromDatabase() and prepareForFirstUse().
+        removeFromDatabase();
+        prepareForFirstUse();
+        
+        try (PreparedStatement insertStatement = getConnection().prepareStatement(""
+                + "INSERT INTO intrinsic_ic (id, seco, zhou, sanchez, leaves) "
+                + "VALUES (?, ?, ?, ?, ?)")) {
+            
+            getLogger().info("Finding all the intrinsic IC values (SECO, ZHOU, SANCHEZ and LEAVES)");
+            
+            // Start by getting a reference to all the classes
+            int[] allClasses = utils.getAllIds(EntityType.CLASS);
+            log_tC = Math.log(allClasses.length);
+            log_tL = Math.log(leaves.getNumberOfLeaves());
+            
+            maxDepth = hierarchy.getMaxDepth();
+            log_mD1 = Math.log(maxDepth + 1);
+            
+            int counter = 0;
+            for (int id : allClasses) {
+                calculate(id);
+                insertStatement.setInt(1, id);
+                insertStatement.setDouble(2, secoIC);
+                insertStatement.setDouble(3, zhouIC);
+                insertStatement.setDouble(4, sanchezIC);
+                insertStatement.setDouble(5, leavesIC);
+                insertStatement.addBatch();
+                
+                counter++;
+                if (counter % 1000 == 0) {
+                    getLogger().info("... IC for " + counter + " classes found ...");
+                    insertStatement.executeBatch();
+                }
+            }
+            
+            insertStatement.executeBatch();
+        }
     }
 }
