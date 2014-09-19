@@ -29,6 +29,10 @@ import com.google.gson.JsonElement;
  * <li>All implementations of this class that are going to be called directly by the user must be marked as final;
  * <li>Implementation of this class need to define {@link #prepareForFirstUse()}, {@link #update()} and
  * {@link #removeFromDatabase()} (see their javadoc for more information);
+ * <li>In the case of a change in table specifications (particularly if the name of a table changes between two versions
+ * of the extractor), care must be taken to manually update the underlying database. For example, if an extractor
+ * inserts information in a table named <tt>Infromation</tt> (<i>sic</i>) and this misspelling is corrected, it is
+ * possible that the older table is never deleted from the database.
  * </ul>
  */
 public abstract class Extractor {
