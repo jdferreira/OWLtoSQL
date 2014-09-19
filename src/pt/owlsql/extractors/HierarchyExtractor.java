@@ -68,8 +68,8 @@ public final class HierarchyExtractor extends Extractor {
         removeFromDatabase();
         prepareForFirstUse();
         
-        try (PreparedStatement insertStatement = getConnection().prepareStatement(""
-                + "INSERT IGNORE INTO hierarchy (subclass, superclass, distance) VALUES (?, ?, ?)")) {
+        try (PreparedStatement insertStatement = getConnection()
+                .prepareStatement("" + "INSERT IGNORE INTO hierarchy (subclass, superclass, distance) VALUES (?, ?, ?)")) {
             
             getLogger().info("Finding all the classes");
             
@@ -138,13 +138,14 @@ public final class HierarchyExtractor extends Extractor {
             insertStatement.executeBatch();
         }
         
-        try (PreparedStatement newInsertDistance = getConnection().prepareStatement(""
-                + "INSERT IGNORE INTO hierarchy (subclass, superclass, distance)"
-                + "  SELECT h1.subclass, h2.superclass, h1.distance + 1"
-                + "  FROM hierarchy AS h1, hierarchy AS h2"
-                + "  WHERE h1.superclass = h2.subclass AND"
-                + "        h1.distance = ? AND"
-                + "        h2.distance = 1")) {
+        try (PreparedStatement newInsertDistance = getConnection()
+                .prepareStatement(""
+                                          + "INSERT IGNORE INTO hierarchy (subclass, superclass, distance)"
+                                          + "  SELECT h1.subclass, h2.superclass, h1.distance + 1"
+                                          + "  FROM hierarchy AS h1, hierarchy AS h2"
+                                          + "  WHERE h1.superclass = h2.subclass AND"
+                                          + "        h1.distance = ? AND"
+                                          + "        h2.distance = 1")) {
             
             int distance = 1;
             while (true) {
@@ -173,29 +174,21 @@ public final class HierarchyExtractor extends Extractor {
         Connection connection = getConnection();
         
         selectAncestryStatement = connection.prepareStatement(""
-                + "SELECT o_superclass.id "
+                + "SELECT superclass "
                 + "FROM hierarchy "
-                + "JOIN owl_objects AS o_subclass   ON o_subclass.id   = hierarchy.subclass "
-                + "JOIN owl_objects AS o_superclass ON o_superclass.id = hierarchy.superclass "
-                + "WHERE o_subclass.id = ?");
+                + "WHERE subclass = ?");
         selectAncestrySizeStatement = connection.prepareStatement(""
                 + "SELECT COUNT(*) "
                 + "FROM hierarchy "
-                + "JOIN owl_objects AS o_subclass   ON o_subclass.id   = hierarchy.subclass "
-                + "JOIN owl_objects AS o_superclass ON o_superclass.id = hierarchy.superclass "
-                + "WHERE o_subclass.id = ?");
+                + "WHERE subclass = ?");
         selectDescendantsStatement = connection.prepareStatement(""
-                + "SELECT o_subclass.id "
+                + "SELECT subclass "
                 + "FROM hierarchy "
-                + "JOIN owl_objects AS o_subclass   ON o_subclass.id   = hierarchy.subclass "
-                + "JOIN owl_objects AS o_superclass ON o_superclass.id = hierarchy.superclass "
-                + "WHERE o_superclass.id = ?");
+                + "WHERE superclass = ?");
         selectDescendantsSizeStatement = connection.prepareStatement(""
                 + "SELECT COUNT(*) "
                 + "FROM hierarchy "
-                + "JOIN owl_objects AS o_subclass   ON o_subclass.id   = hierarchy.subclass "
-                + "JOIN owl_objects AS o_superclass ON o_superclass.id = hierarchy.superclass "
-                + "WHERE o_superclass.id = ?");
+                + "WHERE superclass = ?");
         getMaxDepthStatement = connection.prepareStatement("SELECT MAX(distance) FROM hierarchy");
         getDepthStatement = connection.prepareStatement("SELECT MAX(distance) FROM hierarchy WHERE subclass = ?");
     }

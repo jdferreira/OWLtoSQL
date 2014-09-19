@@ -41,13 +41,16 @@ public final class NamesExtractor extends Extractor {
     @Override
     public void prepareForFirstUse() throws SQLException {
         try (Statement statement = getConnection().createStatement()) {
-            statement.executeUpdate("CREATE TABLE names ("
-                    + "id INT PRIMARY KEY NOT NULL, "
-                    + "property INT NOT NULL, "
-                    + "priority INT NOT NULL, "
-                    + "name TEXT NOT NULL, "
-                    + "INDEX (name(64)), "
-                    + "UNIQUE (id, priority))");
+            statement.executeUpdate(""
+                    + "CREATE TABLE names ("
+                    + "  id INT NOT NULL, "
+                    + "  property INT NOT NULL, "
+                    + "  priority INT NOT NULL, "
+                    + "  name TEXT NOT NULL, "
+                    + "  INDEX (id), "
+                    + "  INDEX (name(64)), "
+                    + "  UNIQUE (id, priority)"
+                    + ")");
         }
     }
     
@@ -126,7 +129,7 @@ public final class NamesExtractor extends Extractor {
                                 
                                 counter++;
                                 if (counter % 1000 == 0) {
-                                    System.out.println("... " + counter + " names found ...");
+                                    getLogger().info("... " + counter + " names found ...");
                                 }
                             }
                         }

@@ -41,7 +41,7 @@ public final class RelationsExtractor extends Extractor {
                     + "  end INT, "
                     + "  INDEX (start), "
                     + "  INDEX (chain(256)), "
-                    + "  INDEX (end), "
+                    + "  INDEX (end)"
                     + ")");
         }
     }
@@ -91,7 +91,7 @@ public final class RelationsExtractor extends Extractor {
                     for (int i = 0; i < properties.length; i++) {
                         if (i > 0)
                             sb.append(",");
-                        sb.append(properties[i]);
+                        sb.append(utils.getID(properties[i]));
                     }
                     insertStatement.setString(2, sb.toString());
                     insertStatement.setInt(3, utils.getID(chain.getEndPoint()));
