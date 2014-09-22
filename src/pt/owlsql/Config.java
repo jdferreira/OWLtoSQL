@@ -21,6 +21,7 @@ import org.semanticweb.owlapi.model.OWLOntologyCreationException;
 import org.semanticweb.owlapi.model.OWLOntologyManager;
 
 import pt.json.JSONException;
+import pt.owlsql.extractors.SQLCoreUtils;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -84,6 +85,7 @@ public final class Config {
     private static String password;
     
     private static final ArrayList<ExtractorSpec<?>> extractorSpecs = new ArrayList<>();
+    private static final ExtractorSpec<SQLCoreUtils> sqlCoreUtilsSpec = new ExtractorSpec<>(SQLCoreUtils.class);
     
     
     static {
@@ -309,6 +311,7 @@ public final class Config {
         
         HashSet<Class<?>> seenClasses = new HashSet<>();
         
+        extractorSpecs.add(sqlCoreUtilsSpec);
         for (int i = 0; i < extractorsArray.size(); i++) {
             ExtractorSpec<?> spec;
             try {
@@ -317,6 +320,10 @@ public final class Config {
             catch (JSONException e) {
                 throw e.withPrefix("extractors", "[" + i + "]");
             }
+            if (spec.getExtractorClass() == SQLCoreUtils.class)
+                throw new JSONException(SQLCoreUtils.class.getName() + " cannot be specified by the user.",
+                        "extractors", "[" + i + "]");
+            
             if (seenClasses.contains(spec.getClass()))
                 throw new JSONException("Extractor classes must be unique", "extractors", "[" + i + "]");
             

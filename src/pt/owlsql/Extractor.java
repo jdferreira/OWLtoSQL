@@ -172,7 +172,7 @@ public abstract class Extractor {
      * @throws DependencyException If the dependency cannot be satisfied
      */
     protected final <U extends Extractor> U getDependency(Class<U> cls) throws DependencyException {
-        for (Extractor extractor : Executor.getPreparedExtractors()) {
+        for (Extractor extractor : Application.getPreparedExtractors()) {
             if (cls.isInstance(extractor))
                 return cls.cast(extractor);
         }

@@ -2,45 +2,43 @@
 	// This file contains the information needed to extract information from OWL
 	// files
 	
-	// You can give some variables to be used further down on the rest of this
-	// file. For a variable with name "var", you can refer to its value as
-	// "${var}" in the rest of the XML content. It will be replaced by the value
-	// of that variable. Notice that in the following case
+	// You can provide with variables to be used on the rest of this file. For a
+	// variable with name "var", you can refer to its value as "${var}" in the
+	// rest of the JSON content (except JSON objects keys). It will be replaced
+	// by the value of that variable. Notice that in the following case
 	//
 	// "variables": { "A": "${C}", "B": "value1", "C": "This is ${B}" },
 	//
-	// ${C} would be translated as "This is value1", and ${A} would also be
-	// replaces with "This is value1". However, cyclic references are caught and
-	// if any is found, an error occurs. Using a non-defined parameter is an
-	// error further down the file. To escape the dollar sign in a string, it
-	// must be doubled:
+	// ${C} is replaced with "This is value1", and ${A} is also replaced with
+	// that string. However, cyclic references are caught and if any is found,
+	// an error occurs. Using a non-defined parameter yields an error. To escape
+	// the dollar sign in a string, double it:
 	//
 	// "variables": { "temp": "$$ is a dollar sign" }
 	//
-	// Since all values are expanded in this way (except keys on JSON objects),
+	// Since all values are expanded in this way (except on JSON objects key),
 	// this escaping mechanism must be used in every such string, if needed.
 	
 	"variables" : {
-		// "home": "/home/jferreira/Ontologies"
-		"home": "/home/joao/Documents/Ontologies"
+		"BASE_URL": "http://130.88.198.11/co-ode-files/ontologies"
 	},
 	
 	
-	// You can specify an ontology to load via the "ontologies" JSON array. This
-	// options expects a valid URL that can be retrieved from the system (file:)
-	// or from the web (http:).
+	// You can specify the ontologies to load with the following JSON array.
+	// Each item in the array must be a valid URL that can be retrieved from the
+	// system (file:) or from the web (http:).
 	// At least one ontology must be provided
 	
 	"ontologies": [
-		"file:${home}/pizza.owl"
+		"${BASE_URL}/pizza.owl"
 	],
 	
 	
-	// MySQL parameters must be given. The "mysql" JSON object contains the name
-	// of the database and the authentication parameters (username and password).
-	// Failing to give any of these attributes is an error. Additionally, you
-	// can also given the optional "host" parameter; if not gien, "localhost" is
-	// used.
+	// MySQL parameters must be given. The following JSON object contains the
+	// name of the database and the authentication parameters (username and
+	// password). Failing to give any of these attributes results in an error.
+	// Additionally, you can give the optional "host" parameter, which defaults
+	// to "localhost".
 	
 	"mysql": {
 		"database": "owltosql",
@@ -50,20 +48,46 @@
 	},
 	
 	
+	// Finally, you need to provide an array containing the extractors to run.
+	// Each items in this array must be a JSON object containing the mandatory
+	// "class" element, which must be a valid Java class extending the
+	// pt.owlsql.Extractor abstract class.
+	// Depending on the extractor, other parameters may be needed or allowed.
+	// Consult the extractor documentation to find the parameters for each
+	// extractor.
+	// The extractor execute in the order they are given. This is important, as
+	// some extractors depend on the execution of previous extractors (e.g.,
+	// LeavesExtractor and IntrinsicICExtractor depend on HierarchyExtractor)
+	
 	"extractors": [
-		{ "class": "pt.owlsql.extractors.SQLCoreUtils" },
-		{ "class": "pt.owlsql.extractors.NamesExtractor",
-			"properties": [ "http://www.w3.org/2000/01/rdf-schema#label" ] },
-		{ "class": "pt.owlsql.extractors.HierarchyExtractor" },
-		{ "class": "pt.owlsql.extractors.ExtendedHierarchyExtractor",
-			"properties": [ "http://www.co-ode.org/ontologies/pizza/pizza.owl#hasIngredient" ],
-			"identifier": "ingredients",
-			"subproperties": true,
-			"emulate": [ "transitive" ] },
-		{ "class": "pt.owlsql.extractors.LeavesExtractor" },
-		{ "class": "pt.owlsql.extractors.IntrinsicICExtractor",
-			"zhou_k": 0.5 },
-		// { "class": "pt.owlsql.extractors.ExtrinsicICExtractor" },
-		{ "class": "pt.owlsql.extractors.DisjointnessExtractor" }
+		{
+			"class": "pt.owlsql.extractors.NamesExtractor",
+			"properties": [ "http://www.w3.org/2000/01/rdf-schema#label" ]
+		},
+		{
+			"class": "pt.owlsql.extractors.HierarchyExtractor"
+		},
+		{
+			"class": "pt.owlsql.extractors.ExtendedHierarchyExtractor",
+			"specs": {
+				"superparts": {
+					"properties": [
+						"http://www.co-ode.org/ontologies/pizza/pizza.owl#hasIngredient"
+					],
+					"subproperties": true,
+					"emulate": [ "transitive" ]
+				}
+			}
+		},
+		{
+			"class": "pt.owlsql.extractors.LeavesExtractor"
+		},
+		{
+			"class": "pt.owlsql.extractors.IntrinsicICExtractor",
+			"zhou_k": 0.5
+		},
+		{
+			"class": "pt.owlsql.extractors.DisjointnessExtractor"
+		}
 	]
 }
