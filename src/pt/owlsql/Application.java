@@ -39,7 +39,7 @@ import difflib.Patch;
  * @author jferreira
  *
  */
-public final class Executor {
+public final class Application {
     
     private static class Report {
         
@@ -80,7 +80,7 @@ public final class Executor {
     
     private static Extractor currentExtractor;
     
-    private static final Logger logger = Logger.getLogger(Executor.class.getName());
+    private static final Logger logger = Logger.getLogger(Application.class.getName());
     
     
     /**
@@ -733,7 +733,7 @@ public final class Executor {
     }
     
     
-    public Executor() {
+    public Application() {
         throw new RuntimeException("Cannot instantiate this class at runtime");
     }
     
