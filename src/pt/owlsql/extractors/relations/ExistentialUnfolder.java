@@ -31,7 +31,7 @@ import org.semanticweb.owlapi.model.OWLQuantifiedRestriction;
 import org.semanticweb.owlapi.util.DefaultPrefixManager;
 
 
-class Unfolder implements OWLClassExpressionVisitorEx<RelationsStore> {
+class ExistentialUnfolder implements OWLClassExpressionVisitorEx<RelationsStore> {
     
     public static void main(String[] args) {
         OWLDataFactory df = OWLManager.getOWLDataFactory();
@@ -61,7 +61,7 @@ class Unfolder implements OWLClassExpressionVisitorEx<RelationsStore> {
         OWLClassExpression x8 = df.getOWLObjectIntersectionOf(x6, x7);
         OWLClassExpression x9 = df.getOWLObjectSomeValuesFrom(inheresIn, x8);
         
-        RelationsStore store = x9.accept(new Unfolder());
+        RelationsStore store = x9.accept(new ExistentialUnfolder());
         for (Chain chain : store) {
             System.out.println(Arrays.toString(chain.getChain()) + " " + chain.getEndPoint());
         }
@@ -212,11 +212,7 @@ class Unfolder implements OWLClassExpressionVisitorEx<RelationsStore> {
     
     @Override
     public RelationsStore visit(OWLObjectUnionOf ce) {
-        RelationsStore result = new RelationsStore();
-        for (OWLClassExpression operand : ce.getOperands()) {
-            result.addAll(operand.accept(this));
-        }
-        return result;
+        return RelationsStore.empty();
     }
     
 }
