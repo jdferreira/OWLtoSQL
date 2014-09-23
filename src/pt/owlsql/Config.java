@@ -287,6 +287,7 @@ public final class Config {
             throw e.withPrefix("class");
         }
         
+        object.remove("class"); // "class" should not be in the parameters
         Hashtable<String, JsonElement> parameters = new Hashtable<>();
         for (Entry<String, JsonElement> entry : object.entrySet()) {
             parameters.put(entry.getKey(), entry.getValue());

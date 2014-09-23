@@ -101,12 +101,10 @@ public abstract class Extractor {
     
     
     /**
-     * Determines if the class has changed since the last time this extractor was executed.
+     * Determines the last time this class definition has changed, so that it can be compared with the last time this
+     * extractor was executed.
      * 
-     * @param lastUpdateTime The time against which to compare the modification date of the .class file.
-     * 
-     * @return <code>true</code> if the .class file of this class has changed since the last time the extractor was
-     *         executed; <code>false</code> otherwise.
+     * @return a {@link Timestamp} that corresponds to the last time this class definition was changed.
      * 
      * @throws OwlSqlException If the modification date of the .class file cannot be determined.
      */
@@ -206,8 +204,8 @@ public abstract class Extractor {
      * is especially relevant in extractors that depend on external resources and that need to update if the external
      * resource has changed since the last update time.
      * <p>
-     * Notice that even if this method returns <code>false</code>, the extractor may be updated, if the Executor
-     * determines that it does.
+     * Notice that even if this method returns <code>false</code>, the extractor may be updated, if the application
+     * determines that it needs to.
      * 
      * @param lastUpdateTime The time this extractor was last executed.
      * 

@@ -8,6 +8,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.Timestamp;
 import java.util.Hashtable;
 import java.util.Map.Entry;
 
@@ -62,6 +63,12 @@ public final class AnnotationExtractor extends Extractor {
             super.processOption(key, element);
     }
     
+    @Override
+    protected boolean mustUpdate(Timestamp lastUpdateTime) {
+        // TODO This should return true if the corpora have changed since the last time the extractor was executed
+        // For now, we are conservative and always assume htat an update is required.
+        return true;
+    }
     
     @Override
     public Extractor[] getDirectDependencies() throws DependencyException {

@@ -479,8 +479,6 @@ public final class Application {
         originalNextIndex = 0;
         
         for (Delta delta : deltas) {
-            // We need to know for each extractor, if it is the last one of its class (important for removals).
-            
             int revisedStart = delta.getRevised().getPosition();
             int revisedEnd = delta.getRevised().last();
             
@@ -626,9 +624,10 @@ public final class Application {
         // an exception is thrown, the metadata in the database corresponds exactly to what was executed. Additionally,
         // we need to intercept shutdown signals that would not be caught in normal execution and perform this metadata
         // update
-        Runtime.getRuntime().addShutdownHook(new Thread() {
+        Thread errorHandler = new Thread() {
             @Override
             public void run() {
+                // Otherwise, we need to react to the fact that some error may have happened
                 recoverFromError();
                 try {
                     updateExtractorMetadata();
@@ -637,7 +636,10 @@ public final class Application {
                     exit("An error occurred when updating the metadata. The database may be severely compromised.", e);
                 }
             }
-        });
+        };
+        
+        // We default to an exit that needs to handle error and exceptions
+        Runtime.getRuntime().addShutdownHook(errorHandler);
         
         try {
             run();
@@ -658,6 +660,9 @@ public final class Application {
                 exit("An error occurred when updating the metadata. The database may be severely compromised.", e);
             }
         }
+        
+        // At this point, no more error need to be handled, so remove the handler
+        Runtime.getRuntime().removeShutdownHook(errorHandler);
     }
     
     
